@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     thumbnail_max_bytes: int = 500 * 1024
     thumbnail_quality: int = 82
 
+    # Uploaded image compression (server-side safety net)
+    image_max_pixels: int = 5_000_000  # <= 5 megapixels
+    image_quality: int = 85
+
     # CORS
     cors_origins: str = "*"
 

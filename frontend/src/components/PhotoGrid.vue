@@ -10,7 +10,7 @@
       >
         <div class="thumb-wrap">
           <img
-            :src="photo.thumbnail_url || photo.original_url"
+            :src="photo.thumbnail_url || photo.image_url"
             loading="lazy"
             decoding="async"
             class="thumb"

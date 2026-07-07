@@ -74,6 +74,29 @@ r = client.post(f"/api/spaces/{space_id}/photos/upload", data={"category_id": ca
 check(r["code"] == 0 and r["data"]["count"] == 2, "upload 2 photos")
 photo_ids = [p["id"] for p in r["data"]["photos"]]
 
+# upload an oversized image (24MP) and verify it is compressed to <=5MP
+big_buf = io.BytesIO()
+Image.new("RGB", (6000, 4000), (12, 34, 56)).save(big_buf, format="PNG")
+rb = client.post(
+    f"/api/spaces/{space_id}/photos/upload",
+    data={"category_id": cat_id},
+    files=[("files", ("big.png", big_buf.getvalue(), "image/png"))],
+    headers=lead,
+).json()
+big_id = rb["data"]["photos"][0]["id"]
+# processing is synchronous in fallback mode (no broker); verify stored image dimensions
+from app.database import SessionLocal as _SL
+from app.models import Photo as _Photo
+from PIL import Image as _Img
+_db = _SL()
+_p = _db.get(_Photo, big_id)
+with _Img.open(_p.file_path) as _im:
+    _px = _im.size[0] * _im.size[1]
+_db.close()
+check(_px <= 5_000_000, f"oversized image compressed to <=5MP ({_px}px)")
+# image endpoint serves it
+check(client.get(f"/api/spaces/{space_id}/photos/{big_id}/image", headers=lead).status_code == 200, "image endpoint serves compressed")
+
 # thumbnails generated synchronously (fallback path since no broker)
 r = client.get(f"/api/spaces/{space_id}/photos/{photo_ids[0]}/thumbnail", headers=lead)
 check(r.status_code == 200 and len(r.content) > 0, "thumbnail served")
@@ -161,7 +184,7 @@ check(r["code"] == 0 and r["data"][0]["id"] == photo_ids[0], "list sort by score
 
 # stats + export (leader)
 r = client.get(f"/api/spaces/{space_id}/stats", headers=lead).json()
-check(r["code"] == 0 and len(r["data"]) == 2, "stats dashboard")
+check(r["code"] == 0 and len(r["data"]) == 3, "stats dashboard")
 r = client.get(f"/api/spaces/{space_id}/export", headers=lead)
 check(r.status_code == 200 and r.content.startswith(b"\xef\xbb\xbf"), "csv export with BOM")
 

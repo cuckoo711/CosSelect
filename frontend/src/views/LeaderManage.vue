@@ -87,11 +87,13 @@
         选择图片（可多选）
       </el-button>
       <div v-if="picked.length" class="picked">已选 {{ picked.length }} 张，共 {{ pickedMB }} MB</div>
-      <el-progress v-if="uploading" :percentage="progress" :stroke-width="10" style="margin-top: 12px" />
+      <div class="picked dim">上传前会自动压缩到最大 500 万像素，以节省流量与存储。</div>
+      <div v-if="compressing" class="picked">正在压缩图片…</div>
+      <el-progress v-if="uploading && !compressing" :percentage="progress" :stroke-width="10" style="margin-top: 12px" />
       <template #footer>
         <el-button @click="uploadVisible = false" :disabled="uploading">取消</el-button>
         <el-button type="primary" :loading="uploading" :disabled="!picked.length" @click="doUpload">
-          开始上传
+          {{ compressing ? '压缩中…' : '开始上传' }}
         </el-button>
       </template>
     </el-dialog>
@@ -114,6 +116,7 @@ import {
   uploadPhotos,
 } from '@/api'
 import { copyText, downloadText } from '@/utils/clipboard'
+import { compressImage } from '@/utils/image'
 
 const props = defineProps<{ spaceId: string }>()
 const spaceId = props.spaceId
@@ -159,6 +162,7 @@ const uploadTarget = ref<CategoryNode | null>(null)
 const fileInput = ref<HTMLInputElement | null>(null)
 const picked = ref<File[]>([])
 const uploading = ref(false)
+const compressing = ref(false)
 const progress = ref(0)
 const pickedMB = computed(() =>
   (picked.value.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1),
@@ -249,13 +253,22 @@ async function doUpload() {
   if (!uploadTarget.value || !picked.value.length) return
   uploading.value = true
   progress.value = 0
+  compressing.value = true
   try {
-    await uploadPhotos(spaceId, uploadTarget.value.id, picked.value, (p) => (progress.value = p))
-    ElMessage.success(`已上传 ${picked.value.length} 张，缩略图后台生成中`)
+    // compress in the browser first (<=5MP) to save bandwidth
+    const count = picked.value.length
+    const compressed: File[] = []
+    for (const f of picked.value) {
+      compressed.push(await compressImage(f))
+    }
+    compressing.value = false
+    await uploadPhotos(spaceId, uploadTarget.value.id, compressed, (p) => (progress.value = p))
+    ElMessage.success(`已上传 ${count} 张，缩略图后台生成中`)
     uploadVisible.value = false
     await loadTree()
   } finally {
     uploading.value = false
+    compressing.value = false
   }
 }
 

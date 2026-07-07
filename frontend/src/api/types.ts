@@ -22,7 +22,7 @@ export interface Photo {
   file_size: number
   upload_time: string
   thumbnail_url: string | null
-  original_url: string
+  image_url: string
   avg_score: number
   rating_count: number
   comment_count: number
@@ -53,7 +53,7 @@ export interface StatsRow {
   original_name: string
   category_path: string
   thumbnail_url: string | null
-  original_url: string
+  image_url: string
   avg_score: number
   rating_count: number
   comment_count: number

@@ -80,7 +80,7 @@ def photo_detail(
         thumbnail_url=(
             f"/api/spaces/{space_pid}/photos/{photo.id}/thumbnail" if photo.thumbnail_path else None
         ),
-        original_url=f"/api/spaces/{space_pid}/photos/{photo.id}/original",
+        image_url=f"/api/spaces/{space_pid}/photos/{photo.id}/image",
         avg_score=stats["avg_score"],
         rating_count=stats["rating_count"],
         comment_count=stats["comment_count"],

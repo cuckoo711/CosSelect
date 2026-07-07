@@ -81,7 +81,7 @@ class PhotoOut(BaseModel):
     file_size: int
     upload_time: datetime
     thumbnail_url: str | None
-    original_url: str
+    image_url: str
     avg_score: float
     rating_count: int
     comment_count: int

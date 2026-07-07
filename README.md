@@ -7,9 +7,10 @@
 - **私密访问**：无公开分享，参与者需 8 位口令进入（24 小时有效，可随时重置）
 - **免注册**：参与者用昵称识别身份，相同昵称自动恢复历史评分/批注/喜欢
 - **团长管理**：无限级分类（折叠展开 + 拖动排序）、批量上传、缩略图异步生成、统计看板、CSV 导出
-- **移动优先预览器**：触摸滑动切换、双指缩放、查看原图确认、`el-rate` 半星评分、批注（团长自动置顶）、点赞、私密喜欢、原图下载
+- **移动优先预览器**：触摸滑动切换、双指缩放、`el-rate` 半星评分、批注（团长自动置顶）、点赞、私密喜欢
 - **暗色简约主题**：参考 Jellyfin 配色
-- **异步缩略图**：Celery + Redis 队列生成（≤1200px 宽、≤500KB、去除 Exif），未生成时降级显示原图
+- **上传即压缩**：前端上传前 + 后端异步双重压缩到 ≤500 万像素（JPEG，去除 Exif），大幅降低存储与带宽压力
+- **异步缩略图**：Celery + Redis 队列生成（≤1200px 宽、≤500KB），未生成时降级显示压缩图
 
 ## 技术栈
 
@@ -43,14 +44,14 @@ docker compose up -d --build
 | `worker` | Celery worker，生成缩略图 |
 | `frontend` | Nginx，托管 SPA 并反代 `/api` 到 backend，宿主暴露 `HTTP_PORT` |
 
-原图与缩略图存于数据卷 `photodata`（容器内 `/data/spaces`）。
+压缩后的图片与缩略图存于数据卷 `photodata`（容器内 `/data/spaces`）。
 
 ## 使用流程
 
 1. **团长**：门户选「我是团长」→ 创建空间 → **保存管理密钥**（后续管理凭证）与口令。
 2. 进入「分类与上传」：建分类、拖动排序、批量上传图片。
 3. **参与者**：门户选「我是参与者」→ 输入口令 → 设置昵称 → 进入。
-4. 网格中点击缩略图打开预览器：评分（必选、可改）、批注、点赞、喜欢、查看/下载原图，左右滑动切换。
+4. 网格中点击缩略图打开预览器：评分（必选、可改）、批注、点赞、喜欢，左右滑动切换。
 5. **团长**在「统计看板」查看排名并导出 CSV。
 
 > 团长身份靠**管理密钥**校验（请求头 `X-Manage-Key`）；参与者靠加入时下发的令牌（`X-Participant-Token`）。重置口令不会清除任何数据。
@@ -98,7 +99,7 @@ pnpm build        # 类型检查 + 生产构建
 | POST | `/api/spaces/{id}/photos/upload` | 批量上传 |
 | GET | `/api/spaces/{id}/photos?category_id&sort` | 列表（sort: score/time/count）|
 | GET | `/api/spaces/{id}/photos/{pid}` | 详情（含评分、批注）|
-| GET | `/api/spaces/{id}/photos/{pid}/thumbnail\|original` | 缩略图 / 原图（`?download=true` 下载）|
+| GET | `/api/spaces/{id}/photos/{pid}/thumbnail\|image` | 缩略图 / 压缩后的展示图 |
 | POST | `/api/spaces/{id}/photos/{pid}/ratings` | 评分（0.5 步进，唯一可改）|
 | GET/POST/PUT/DELETE | `/api/spaces/{id}/.../comments...` | 批注（团长自动置顶，仅本人可改删）|
 | POST | `/api/spaces/{id}/comments/{cid}/like` | 赞同切换 |

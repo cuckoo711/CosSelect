@@ -22,14 +22,7 @@
         class="stage-img"
         :style="imgStyle"
         draggable="false"
-        @load="onImgLoad"
       />
-
-      <!-- view original floating button -->
-      <div v-if="!showingOriginal && current" class="view-original" @click.stop="confirmOriginal">
-        查看原图 ({{ sizeMB }} MB)
-      </div>
-      <div v-if="loadingOriginal" class="loading-original">原图加载中…</div>
 
       <!-- side arrows (desktop) -->
       <div class="arrow left" v-if="currentIndex > 0" @click.stop="prev">
@@ -43,13 +36,13 @@
     <!-- filmstrip: prev/next small thumbs -->
     <div class="filmstrip">
       <div class="film prev">
-        <img v-if="prevPhoto" :src="prevPhoto.thumbnail_url || prevPhoto.original_url" @click="prev" />
+        <img v-if="prevPhoto" :src="prevPhoto.thumbnail_url || prevPhoto.image_url" @click="prev" />
       </div>
       <div class="film current">
-        <img v-if="current" :src="current.thumbnail_url || current.original_url" />
+        <img v-if="current" :src="current.thumbnail_url || current.image_url" />
       </div>
       <div class="film next">
-        <img v-if="nextPhoto" :src="nextPhoto.thumbnail_url || nextPhoto.original_url" @click="next" />
+        <img v-if="nextPhoto" :src="nextPhoto.thumbnail_url || nextPhoto.image_url" @click="next" />
       </div>
     </div>
 
@@ -81,10 +74,6 @@
           <span class="ic">{{ isFavorite ? '❤️' : '🤍' }}</span>
           <span class="lbl">喜欢</span>
         </button>
-        <button class="act" @click="download">
-          <el-icon size="20"><Download /></el-icon>
-          <span class="lbl">下载</span>
-        </button>
         <button class="act" @click="commentDrawer = true">
           <el-icon size="20"><ChatDotRound /></el-icon>
           <span class="lbl">批注{{ comments.length ? ` ${comments.length}` : '' }}</span>
@@ -113,7 +102,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessageBox, ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import type { Comment, Photo, PhotoDetail } from '@/api/types'
 import {
   getPhotoDetail,
@@ -140,9 +129,6 @@ const detail = ref<PhotoDetail | null>(null)
 const comments = ref<Comment[]>([])
 const commentDrawer = ref(false)
 
-const showingOriginal = ref(false)
-const loadingOriginal = ref(false)
-
 const myScore = ref(0)
 const isFavorite = ref(false)
 
@@ -151,15 +137,11 @@ const stageRef = ref<HTMLElement | null>(null)
 const current = computed(() => props.photos[currentIndex.value] || null)
 const prevPhoto = computed(() => props.photos[currentIndex.value - 1] || null)
 const nextPhoto = computed(() => props.photos[currentIndex.value + 1] || null)
-const sizeMB = computed(() =>
-  current.value ? (current.value.file_size / 1024 / 1024).toFixed(1) : '0',
-)
 
 const displaySrc = computed(() => {
   if (!current.value) return ''
-  return showingOriginal.value
-    ? current.value.original_url
-    : current.value.thumbnail_url || current.value.original_url
+  // stored image is already compressed (<=5MP); show it directly
+  return current.value.image_url
 })
 
 // ----- zoom / pan state -----
@@ -198,7 +180,6 @@ watch(currentIndex, () => loadCurrent())
 
 async function loadCurrent() {
   if (!current.value) return
-  showingOriginal.value = false
   resetTransform()
   myScore.value = current.value.my_score ?? 0
   isFavorite.value = current.value.my_favorite
@@ -229,23 +210,6 @@ function next() {
   if (currentIndex.value < props.photos.length - 1) currentIndex.value++
 }
 
-function confirmOriginal() {
-  ElMessageBox.confirm(
-    `原图约 ${sizeMB.value} MB，确认加载高清原图？`,
-    '查看原图',
-    { confirmButtonText: '加载', cancelButtonText: '取消', type: 'info' },
-  )
-    .then(() => {
-      loadingOriginal.value = true
-      showingOriginal.value = true
-    })
-    .catch(() => {})
-}
-
-function onImgLoad() {
-  loadingOriginal.value = false
-}
-
 async function onRate(val: number) {
   if (!current.value || props.isLeader) return
   try {
@@ -270,17 +234,6 @@ async function onFavorite() {
   isFavorite.value = res.favorite
   current.value.my_favorite = res.favorite
   emit('update-photo', current.value)
-}
-
-function download() {
-  if (!current.value) return
-  const url = current.value.original_url + '?download=true'
-  const a = document.createElement('a')
-  a.href = url
-  a.download = current.value.original_name
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
 }
 
 // ----- touch gestures -----
@@ -388,29 +341,6 @@ function onTouchEnd(e: TouchEvent) {
   object-fit: contain;
   will-change: transform;
   user-select: none;
-}
-.view-original {
-  position: absolute;
-  right: 14px;
-  bottom: 14px;
-  background: rgba(0, 0, 0, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #fff;
-  padding: 8px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  backdrop-filter: blur(4px);
-}
-.loading-original {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
 }
 .arrow {
   position: absolute;

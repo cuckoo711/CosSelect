@@ -16,7 +16,7 @@ from ..models import Category, Photo, Rating, Space
 from ..response import ApiError, ok
 from ..schemas import PhotoOut
 from ..storage import originals_dir, safe_filename
-from ..tasks import enqueue_thumbnail
+from ..tasks import enqueue_processing
 
 router = APIRouter(prefix="/api/spaces/{space_id}/photos", tags=["photos"])
 
@@ -29,8 +29,8 @@ def _thumb_url(space_pid: str, photo: Photo) -> str | None:
     return f"/api/spaces/{space_pid}/photos/{photo.id}/thumbnail"
 
 
-def _orig_url(space_pid: str, photo: Photo) -> str:
-    return f"/api/spaces/{space_pid}/photos/{photo.id}/original"
+def _image_url(space_pid: str, photo: Photo) -> str:
+    return f"/api/spaces/{space_pid}/photos/{photo.id}/image"
 
 
 @router.post("/upload")
@@ -75,7 +75,7 @@ async def upload_photos(
         db.add(photo)
         db.commit()
         db.refresh(photo)
-        enqueue_thumbnail(photo.id)
+        enqueue_processing(photo.id)
         created.append({"id": photo.id, "original_name": photo.original_name, "file_size": size})
 
     return ok({"count": len(created), "photos": created})
@@ -112,7 +112,7 @@ def list_photos(
                 file_size=p.file_size,
                 upload_time=p.upload_time,
                 thumbnail_url=_thumb_url(space_pid, p),
-                original_url=_orig_url(space_pid, p),
+                image_url=_image_url(space_pid, p),
                 avg_score=st["avg_score"],
                 rating_count=st["rating_count"],
                 comment_count=st["comment_count"],
@@ -136,23 +136,17 @@ def get_thumbnail(space_id: str, photo_id: int, db: Session = Depends(get_db)):
     photo = _get_space_photo(db, space_id, photo_id)
     if photo.thumbnail_path and Path(photo.thumbnail_path).exists():
         return FileResponse(photo.thumbnail_path)
-    # fallback to original when thumbnail not ready yet
+    # fallback to the full image when thumbnail not ready yet
     return FileResponse(photo.file_path)
 
 
-@router.get("/{photo_id}/original")
-def get_original(space_id: str, photo_id: int, download: bool = False, db: Session = Depends(get_db)):
+@router.get("/{photo_id}/image")
+def get_image(space_id: str, photo_id: int, db: Session = Depends(get_db)):
+    """Serve the (compressed <=5MP) display image."""
     photo = _get_space_photo(db, space_id, photo_id)
     if not Path(photo.file_path).exists():
-        raise ApiError("原图不存在", code=404, status_code=404)
-    filename = photo.original_name if download else None
-    return FileResponse(
-        photo.file_path,
-        filename=filename,
-        headers={"Content-Disposition": f'attachment; filename="{photo.original_name}"'}
-        if download
-        else None,
-    )
+        raise ApiError("图片不存在", code=404, status_code=404)
+    return FileResponse(photo.file_path)
 
 
 @router.delete("/{photo_id}")

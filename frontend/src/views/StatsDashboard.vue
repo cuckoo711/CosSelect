@@ -18,7 +18,7 @@
       <div v-else class="list">
         <div v-for="(r, i) in rows" :key="r.photo_id" class="stat-card">
           <div class="rank">{{ i + 1 }}</div>
-          <img :src="r.thumbnail_url || r.original_url" class="thumb" />
+          <img :src="r.thumbnail_url || r.image_url" class="thumb" />
           <div class="info">
             <div class="name">{{ r.original_name }}</div>
             <div class="path">{{ r.category_path }}</div>

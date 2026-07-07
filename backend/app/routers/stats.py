@@ -73,7 +73,7 @@ def _collect_rows(db: Session, space_id: int, space_pid: str) -> list[dict]:
                 "thumbnail_url": (
                     f"/api/spaces/{space_pid}/photos/{p.id}/thumbnail" if p.thumbnail_path else None
                 ),
-                "original_url": f"/api/spaces/{space_pid}/photos/{p.id}/original",
+                "image_url": f"/api/spaces/{space_pid}/photos/{p.id}/image",
                 "avg_score": round(float(avg), 1) if avg is not None else 0.0,
                 "rating_count": int(rating_cnt.get(p.id, 0)),
                 "comment_count": int(comment_cnt.get(p.id, 0)),
@@ -111,7 +111,7 @@ def export_csv(space_id: str, space: Space = Depends(require_leader), db: Sessio
                 r["comment_count"],
                 r["total_likes"],
                 r["total_favorites"],
-                r["original_url"],
+                r["image_url"],
             ]
         )
     buf.seek(0)
