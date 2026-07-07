@@ -19,3 +19,6 @@ data/
 
 # python build artifacts
 backend/*.egg-info/
+frontend/*.tsbuildinfo
+frontend/vite.config.d.ts
+frontend/vite.config.js
