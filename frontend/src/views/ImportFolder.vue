@@ -129,7 +129,7 @@
       </div>
       <template #footer>
         <div class="viewer-footer">
-          <span class="dim small">← → 键可切换 · {{ viewIndex + 1 }}/{{ viewList.length }}</span>
+          <span class="dim small">← → 切换 · Del 删除 · {{ viewIndex + 1 }}/{{ viewList.length }}</span>
           <span class="cs-spacer" />
           <el-button type="danger" @click="deleteCurrentView">
             <el-icon style="margin-right: 4px"><Delete /></el-icon>删除这张
@@ -429,6 +429,10 @@ function onViewerKey(e: KeyboardEvent) {
   } else if (e.key === 'ArrowRight') {
     e.preventDefault()
     viewNext()
+  } else if (e.key === 'Delete') {
+    // the Delete (Del) key — not Backspace — deletes the current image
+    e.preventDefault()
+    deleteCurrentView()
   }
 }
 
