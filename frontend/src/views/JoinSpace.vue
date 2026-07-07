@@ -62,7 +62,7 @@ const code = ref('')
 const nickname = ref('')
 const verifying = ref(false)
 const joining = ref(false)
-const verifiedSpaceId = ref<number | null>(null)
+const verifiedSpaceId = ref<string | null>(null)
 
 async function onVerify() {
   if (code.value.length !== 8) {

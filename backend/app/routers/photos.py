@@ -23,29 +23,30 @@ router = APIRouter(prefix="/api/spaces/{space_id}/photos", tags=["photos"])
 _ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff", ".heic"}
 
 
-def _thumb_url(space_id: int, photo: Photo) -> str | None:
+def _thumb_url(space_pid: str, photo: Photo) -> str | None:
     if not photo.thumbnail_path:
         return None
-    return f"/api/spaces/{space_id}/photos/{photo.id}/thumbnail"
+    return f"/api/spaces/{space_pid}/photos/{photo.id}/thumbnail"
 
 
-def _orig_url(space_id: int, photo: Photo) -> str:
-    return f"/api/spaces/{space_id}/photos/{photo.id}/original"
+def _orig_url(space_pid: str, photo: Photo) -> str:
+    return f"/api/spaces/{space_pid}/photos/{photo.id}/original"
 
 
 @router.post("/upload")
 async def upload_photos(
-    space_id: int,
+    space_id: str,
     category_id: int = Form(...),
     files: list[UploadFile] = File(...),
     space: Space = Depends(require_leader),
     db: Session = Depends(get_db),
 ):
+    sid = space.id
     category = db.get(Category, category_id)
-    if not category or category.space_id != space_id:
+    if not category or category.space_id != sid:
         raise ApiError("目标分类不存在", code=404, status_code=404)
 
-    dest_dir = originals_dir(space_id, category_id)
+    dest_dir = originals_dir(sid, category_id)
     created = []
     for uf in files:
         ext = Path(uf.filename or "").suffix.lower()
@@ -82,14 +83,16 @@ async def upload_photos(
 
 @router.get("")
 def list_photos(
-    space_id: int,
+    space_id: str,
     category_id: int = Query(...),
     sort: str = Query("score", pattern="^(score|time|count)$"),
     actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ):
+    sid = actor.space_id
+    space_pid = actor.space_public_id
     category = db.get(Category, category_id)
-    if not category or category.space_id != space_id:
+    if not category or category.space_id != sid:
         raise ApiError("分类不存在", code=404, status_code=404)
 
     photos = db.query(Photo).filter(Photo.category_id == category_id).all()
@@ -108,8 +111,8 @@ def list_photos(
                 original_name=p.original_name,
                 file_size=p.file_size,
                 upload_time=p.upload_time,
-                thumbnail_url=_thumb_url(space_id, p),
-                original_url=_orig_url(space_id, p),
+                thumbnail_url=_thumb_url(space_pid, p),
+                original_url=_orig_url(space_pid, p),
                 avg_score=st["avg_score"],
                 rating_count=st["rating_count"],
                 comment_count=st["comment_count"],
@@ -129,7 +132,7 @@ def list_photos(
 
 
 @router.get("/{photo_id}/thumbnail")
-def get_thumbnail(space_id: int, photo_id: int, db: Session = Depends(get_db)):
+def get_thumbnail(space_id: str, photo_id: int, db: Session = Depends(get_db)):
     photo = _get_space_photo(db, space_id, photo_id)
     if photo.thumbnail_path and Path(photo.thumbnail_path).exists():
         return FileResponse(photo.thumbnail_path)
@@ -138,7 +141,7 @@ def get_thumbnail(space_id: int, photo_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{photo_id}/original")
-def get_original(space_id: int, photo_id: int, download: bool = False, db: Session = Depends(get_db)):
+def get_original(space_id: str, photo_id: int, download: bool = False, db: Session = Depends(get_db)):
     photo = _get_space_photo(db, space_id, photo_id)
     if not Path(photo.file_path).exists():
         raise ApiError("原图不存在", code=404, status_code=404)
@@ -154,12 +157,12 @@ def get_original(space_id: int, photo_id: int, download: bool = False, db: Sessi
 
 @router.delete("/{photo_id}")
 def delete_photo(
-    space_id: int,
+    space_id: str,
     photo_id: int,
     space: Space = Depends(require_leader),
     db: Session = Depends(get_db),
 ):
-    photo = _get_space_photo(db, space_id, photo_id)
+    photo = _get_space_photo(db, space.id, photo_id)
     for p in (photo.file_path, photo.thumbnail_path):
         if p:
             try:
@@ -171,11 +174,19 @@ def delete_photo(
     return ok({"deleted": photo_id})
 
 
-def _get_space_photo(db: Session, space_id: int, photo_id: int) -> Photo:
+def _get_space_photo(db: Session, space_id, photo_id: int) -> Photo:
+    """space_id may be the public string id or the internal int id."""
+    if isinstance(space_id, str):
+        space = db.query(Space).filter(Space.public_id == space_id).first()
+        if not space:
+            raise ApiError("空间不存在", code=404, status_code=404)
+        internal_sid = space.id
+    else:
+        internal_sid = space_id
     photo = (
         db.query(Photo)
         .join(Category, Category.id == Photo.category_id)
-        .filter(Photo.id == photo_id, Category.space_id == space_id)
+        .filter(Photo.id == photo_id, Category.space_id == internal_sid)
         .first()
     )
     if not photo:

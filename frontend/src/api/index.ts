@@ -3,31 +3,31 @@ import type { CategoryNode, Comment, Photo, PhotoDetail, SortKey, StatsRow } fro
 
 // ---------- Spaces ----------
 export const createSpace = () =>
-  request<{ space_id: number; invite_code: string; manage_key: string; expire_time: string }>({
+  request<{ space_id: string; invite_code: string; manage_key: string; expire_time: string }>({
     url: '/api/spaces',
     method: 'post',
   })
 
-export const regenerateCode = (spaceId: number) =>
-  request<{ space_id: number; invite_code: string; expire_time: string }>({
+export const regenerateCode = (spaceId: string) =>
+  request<{ space_id: string; invite_code: string; expire_time: string }>({
     url: `/api/spaces/${spaceId}/regenerate-code`,
     method: 'post',
   })
 
 export const verifyCodeGlobal = (code: string) =>
-  request<{ valid: boolean; space_id: number | null }>({
+  request<{ valid: boolean; space_id: string | null }>({
     url: '/api/spaces/verify-code',
     method: 'post',
     data: { code },
   })
 
-export const getSpaceInfo = (spaceId: number) =>
-  request<{ space_id: number; invite_code: string; expire_time: string; expired: boolean }>({
+export const getSpaceInfo = (spaceId: string) =>
+  request<{ space_id: string; invite_code: string; expire_time: string; expired: boolean }>({
     url: `/api/spaces/${spaceId}/info`,
   })
 
 // ---------- Participants ----------
-export const joinSpace = (spaceId: number, nickname: string) =>
+export const joinSpace = (spaceId: string, nickname: string) =>
   request<{ participant_id: number; nickname: string; token: string; is_new: boolean }>({
     url: `/api/spaces/${spaceId}/participants`,
     method: 'post',
@@ -35,10 +35,10 @@ export const joinSpace = (spaceId: number, nickname: string) =>
   })
 
 // ---------- Categories ----------
-export const listCategories = (spaceId: number) =>
+export const listCategories = (spaceId: string) =>
   request<CategoryNode[]>({ url: `/api/spaces/${spaceId}/categories` })
 
-export const createCategory = (spaceId: number, name: string, parentId: number | null) =>
+export const createCategory = (spaceId: string, name: string, parentId: number | null) =>
   request({
     url: `/api/spaces/${spaceId}/categories`,
     method: 'post',
@@ -46,7 +46,7 @@ export const createCategory = (spaceId: number, name: string, parentId: number |
   })
 
 export const updateCategory = (
-  spaceId: number,
+  spaceId: string,
   categoryId: number,
   payload: { name?: string; parent_id?: number | null },
 ) =>
@@ -57,7 +57,7 @@ export const updateCategory = (
   })
 
 export const reorderCategories = (
-  spaceId: number,
+  spaceId: string,
   items: { id: number; sort_order: number }[],
 ) =>
   request({
@@ -66,24 +66,24 @@ export const reorderCategories = (
     data: { items },
   })
 
-export const deleteCategory = (spaceId: number, categoryId: number) =>
+export const deleteCategory = (spaceId: string, categoryId: number) =>
   request({ url: `/api/spaces/${spaceId}/categories/${categoryId}`, method: 'delete' })
 
 // ---------- Photos ----------
-export const listPhotos = (spaceId: number, categoryId: number, sort: SortKey) =>
+export const listPhotos = (spaceId: string, categoryId: number, sort: SortKey) =>
   request<Photo[]>({
     url: `/api/spaces/${spaceId}/photos`,
     params: { category_id: categoryId, sort },
   })
 
-export const getPhotoDetail = (spaceId: number, photoId: number) =>
+export const getPhotoDetail = (spaceId: string, photoId: number) =>
   request<PhotoDetail>({ url: `/api/spaces/${spaceId}/photos/${photoId}` })
 
-export const deletePhoto = (spaceId: number, photoId: number) =>
+export const deletePhoto = (spaceId: string, photoId: number) =>
   request({ url: `/api/spaces/${spaceId}/photos/${photoId}`, method: 'delete' })
 
 export function uploadPhotos(
-  spaceId: number,
+  spaceId: string,
   categoryId: number,
   files: File[],
   onProgress?: (pct: number) => void,
@@ -103,7 +103,7 @@ export function uploadPhotos(
 }
 
 // ---------- Ratings ----------
-export const submitRating = (spaceId: number, photoId: number, score: number) =>
+export const submitRating = (spaceId: string, photoId: number, score: number) =>
   request<{ photo_id: number; avg_score: number; rating_count: number; my_score: number }>({
     url: `/api/spaces/${spaceId}/photos/${photoId}/ratings`,
     method: 'post',
@@ -111,41 +111,41 @@ export const submitRating = (spaceId: number, photoId: number, score: number) =>
   })
 
 // ---------- Comments ----------
-export const listComments = (spaceId: number, photoId: number) =>
+export const listComments = (spaceId: string, photoId: number) =>
   request<Comment[]>({ url: `/api/spaces/${spaceId}/photos/${photoId}/comments` })
 
-export const createComment = (spaceId: number, photoId: number, content: string) =>
+export const createComment = (spaceId: string, photoId: number, content: string) =>
   request<Comment>({
     url: `/api/spaces/${spaceId}/photos/${photoId}/comments`,
     method: 'post',
     data: { content },
   })
 
-export const updateComment = (spaceId: number, commentId: number, content: string) =>
+export const updateComment = (spaceId: string, commentId: number, content: string) =>
   request<Comment>({
     url: `/api/spaces/${spaceId}/comments/${commentId}`,
     method: 'put',
     data: { content },
   })
 
-export const deleteComment = (spaceId: number, commentId: number) =>
+export const deleteComment = (spaceId: string, commentId: number) =>
   request({ url: `/api/spaces/${spaceId}/comments/${commentId}`, method: 'delete' })
 
-export const toggleLike = (spaceId: number, commentId: number) =>
+export const toggleLike = (spaceId: string, commentId: number) =>
   request<{ comment_id: number; likes_count: number; liked_by_me: boolean }>({
     url: `/api/spaces/${spaceId}/comments/${commentId}/like`,
     method: 'post',
   })
 
 // ---------- Favorites ----------
-export const toggleFavorite = (spaceId: number, photoId: number) =>
+export const toggleFavorite = (spaceId: string, photoId: number) =>
   request<{ photo_id: number; favorite: boolean }>({
     url: `/api/spaces/${spaceId}/photos/${photoId}/favorite`,
     method: 'post',
   })
 
 // ---------- Stats ----------
-export const getStats = (spaceId: number) =>
+export const getStats = (spaceId: string) =>
   request<StatsRow[]>({ url: `/api/spaces/${spaceId}/stats` })
 
-export const exportCsvUrl = (spaceId: number) => `/api/spaces/${spaceId}/export`
+export const exportCsvUrl = (spaceId: string) => `/api/spaces/${spaceId}/export`

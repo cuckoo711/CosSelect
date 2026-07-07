@@ -14,9 +14,17 @@
             <div class="dim small">当前口令（24h 有效）</div>
             <div class="code mono">{{ inviteCode || '—' }}</div>
             <div class="dim small" v-if="expireText">到期：{{ expireText }}</div>
+            <div class="dim small" style="margin-top: 4px">空间 ID：{{ spaceId }}</div>
           </div>
           <span class="cs-spacer" />
           <el-button @click="onRegen" :loading="regenerating">重置口令</el-button>
+        </div>
+        <div class="cs-row" style="margin-top: 12px; gap: 8px">
+          <el-button size="small" @click="copyText(accessUrl)">复制访问地址</el-button>
+          <el-button size="small" @click="copyText(inviteCode)">复制口令</el-button>
+          <el-button size="small" @click="downloadInfo">
+            <el-icon style="margin-right: 4px"><Download /></el-icon>下载信息 TXT
+          </el-button>
         </div>
       </div>
 
@@ -105,15 +113,39 @@ import {
   updateCategory,
   uploadPhotos,
 } from '@/api'
+import { copyText, downloadText } from '@/utils/clipboard'
 
 const props = defineProps<{ spaceId: string }>()
-const spaceId = Number(props.spaceId)
+const spaceId = props.spaceId
 const router = useRouter()
 
 const treeData = ref<CategoryNode[]>([])
 const inviteCode = ref('')
 const expireText = ref('')
 const regenerating = ref(false)
+
+const accessUrl = typeof window !== 'undefined' ? window.location.origin : ''
+
+function downloadInfo() {
+  const text = [
+    '【团片选片 - 空间信息】',
+    '',
+    `参与者访问地址：${accessUrl}`,
+    `空间 ID：${spaceId}`,
+    `进入口令：${inviteCode.value}（24 小时有效，可随时重置）`,
+    expireText.value ? `口令到期：${expireText.value}` : '',
+    '',
+    '── 参与者操作指引 ──',
+    `1. 打开 ${accessUrl}`,
+    '2. 选择「我是参与者」',
+    `3. 输入口令 ${inviteCode.value}`,
+    '4. 设置昵称后即可进入评分',
+  ]
+    .filter((l) => l !== '')
+    .join('\n')
+  downloadText(`团片选片_空间${spaceId}.txt`, text)
+  ElMessage.success('信息已下载')
+}
 
 const dialogVisible = ref(false)
 const dialogMode = ref<'add' | 'rename'>('add')

@@ -36,7 +36,7 @@ router.beforeEach((to) => {
   const session = useSessionStore()
   // guard space routes: must be authed for that space
   if (to.name === 'space' || to.meta.leader) {
-    const sid = Number(to.params.spaceId)
+    const sid = String(to.params.spaceId)
     if (!session.authed || session.spaceId !== sid) {
       return { name: 'portal' }
     }

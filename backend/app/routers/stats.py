@@ -16,7 +16,7 @@ from ..schemas import StatsRow
 router = APIRouter(prefix="/api/spaces/{space_id}", tags=["stats"])
 
 
-def _collect_rows(db: Session, space_id: int) -> list[dict]:
+def _collect_rows(db: Session, space_id: int, space_pid: str) -> list[dict]:
     photos = (
         db.query(Photo)
         .join(Category, Category.id == Photo.category_id)
@@ -71,9 +71,9 @@ def _collect_rows(db: Session, space_id: int) -> list[dict]:
                 "original_name": p.original_name,
                 "category_path": path_cache[p.category_id],
                 "thumbnail_url": (
-                    f"/api/spaces/{space_id}/photos/{p.id}/thumbnail" if p.thumbnail_path else None
+                    f"/api/spaces/{space_pid}/photos/{p.id}/thumbnail" if p.thumbnail_path else None
                 ),
-                "original_url": f"/api/spaces/{space_id}/photos/{p.id}/original",
+                "original_url": f"/api/spaces/{space_pid}/photos/{p.id}/original",
                 "avg_score": round(float(avg), 1) if avg is not None else 0.0,
                 "rating_count": int(rating_cnt.get(p.id, 0)),
                 "comment_count": int(comment_cnt.get(p.id, 0)),
@@ -86,14 +86,14 @@ def _collect_rows(db: Session, space_id: int) -> list[dict]:
 
 
 @router.get("/stats")
-def stats_dashboard(space_id: int, space: Space = Depends(require_leader), db: Session = Depends(get_db)):
-    rows = _collect_rows(db, space_id)
+def stats_dashboard(space_id: str, space: Space = Depends(require_leader), db: Session = Depends(get_db)):
+    rows = _collect_rows(db, space.id, space.public_id)
     return ok(rows)
 
 
 @router.get("/export")
-def export_csv(space_id: int, space: Space = Depends(require_leader), db: Session = Depends(get_db)):
-    rows = _collect_rows(db, space_id)
+def export_csv(space_id: str, space: Space = Depends(require_leader), db: Session = Depends(get_db)):
+    rows = _collect_rows(db, space.id, space.public_id)
 
     buf = io.StringIO()
     buf.write("\ufeff")  # UTF-8 BOM for Excel

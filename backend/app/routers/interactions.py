@@ -47,13 +47,13 @@ def _avg_and_count(db: Session, photo_id: int) -> tuple[float, int]:
 # ---------------- Ratings ----------------
 @router.post("/spaces/{space_id}/photos/{photo_id}/ratings")
 def submit_rating(
-    space_id: int,
+    space_id: str,
     photo_id: int,
     payload: RatingIn,
     actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ):
-    _photo_in_space(db, space_id, photo_id)
+    _photo_in_space(db, actor.space_id, photo_id)
     if actor.is_leader:
         raise ApiError("团长不参与评分")
 
@@ -107,12 +107,12 @@ def _comment_author(c: Comment) -> str:
 
 @router.get("/spaces/{space_id}/photos/{photo_id}/comments")
 def list_comments(
-    space_id: int,
+    space_id: str,
     photo_id: int,
     actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ):
-    _photo_in_space(db, space_id, photo_id)
+    _photo_in_space(db, actor.space_id, photo_id)
     comments = db.query(Comment).filter(Comment.photo_id == photo_id).all()
     liked = my_comment_likes_set(db, [c.id for c in comments], actor.participant_id)
     # pinned first, then by created desc
@@ -122,13 +122,13 @@ def list_comments(
 
 @router.post("/spaces/{space_id}/photos/{photo_id}/comments")
 def create_comment(
-    space_id: int,
+    space_id: str,
     photo_id: int,
     payload: CommentIn,
     actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ):
-    _photo_in_space(db, space_id, photo_id)
+    _photo_in_space(db, actor.space_id, photo_id)
     comment = Comment(
         photo_id=photo_id,
         participant_id=None if actor.is_leader else actor.participant_id,
@@ -144,13 +144,13 @@ def create_comment(
 
 @router.put("/spaces/{space_id}/comments/{comment_id}")
 def update_comment(
-    space_id: int,
+    space_id: str,
     comment_id: int,
     payload: CommentIn,
     actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ):
-    comment = _get_space_comment(db, space_id, comment_id)
+    comment = _get_space_comment(db, actor.space_id, comment_id)
     if not _can_modify(comment, actor):
         raise ApiError("只能编辑自己的批注", code=403, status_code=403)
     comment.content = payload.content
@@ -162,12 +162,12 @@ def update_comment(
 
 @router.delete("/spaces/{space_id}/comments/{comment_id}")
 def delete_comment(
-    space_id: int,
+    space_id: str,
     comment_id: int,
     actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ):
-    comment = _get_space_comment(db, space_id, comment_id)
+    comment = _get_space_comment(db, actor.space_id, comment_id)
     if not _can_modify(comment, actor):
         raise ApiError("只能删除自己的批注", code=403, status_code=403)
     db.delete(comment)
@@ -197,12 +197,12 @@ def _get_space_comment(db: Session, space_id: int, comment_id: int) -> Comment:
 # ---------------- Comment likes ----------------
 @router.post("/spaces/{space_id}/comments/{comment_id}/like")
 def toggle_like(
-    space_id: int,
+    space_id: str,
     comment_id: int,
     actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ):
-    comment = _get_space_comment(db, space_id, comment_id)
+    comment = _get_space_comment(db, actor.space_id, comment_id)
     if actor.is_leader:
         raise ApiError("团长不参与赞同")
 
@@ -228,12 +228,12 @@ def toggle_like(
 # ---------------- Favorites ----------------
 @router.post("/spaces/{space_id}/photos/{photo_id}/favorite")
 def toggle_favorite(
-    space_id: int,
+    space_id: str,
     photo_id: int,
     actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ):
-    _photo_in_space(db, space_id, photo_id)
+    _photo_in_space(db, actor.space_id, photo_id)
     if actor.is_leader:
         raise ApiError("团长不参与喜欢标记")
 

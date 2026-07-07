@@ -18,15 +18,17 @@ router = APIRouter(prefix="/api/spaces/{space_id}/photos", tags=["photo-detail"]
 
 @router.get("/{photo_id}")
 def photo_detail(
-    space_id: int,
+    space_id: str,
     photo_id: int,
     actor: Actor = Depends(get_actor),
     db: Session = Depends(get_db),
 ):
+    sid = actor.space_id
+    space_pid = actor.space_public_id
     photo = (
         db.query(Photo)
         .join(Category, Category.id == Photo.category_id)
-        .filter(Photo.id == photo_id, Category.space_id == space_id)
+        .filter(Photo.id == photo_id, Category.space_id == sid)
         .first()
     )
     if not photo:
@@ -76,9 +78,9 @@ def photo_detail(
         file_size=photo.file_size,
         upload_time=photo.upload_time,
         thumbnail_url=(
-            f"/api/spaces/{space_id}/photos/{photo.id}/thumbnail" if photo.thumbnail_path else None
+            f"/api/spaces/{space_pid}/photos/{photo.id}/thumbnail" if photo.thumbnail_path else None
         ),
-        original_url=f"/api/spaces/{space_id}/photos/{photo.id}/original",
+        original_url=f"/api/spaces/{space_pid}/photos/{photo.id}/original",
         avg_score=stats["avg_score"],
         rating_count=stats["rating_count"],
         comment_count=stats["comment_count"],

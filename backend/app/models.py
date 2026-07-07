@@ -21,6 +21,7 @@ class Space(Base):
     __tablename__ = "spaces"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    public_id: Mapped[str] = mapped_column(String(16), unique=True, index=True, nullable=False)
     invite_code: Mapped[str] = mapped_column(String(8), nullable=False)
     manage_key: Mapped[str] = mapped_column(String(64), nullable=False)
     expire_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)

@@ -54,39 +54,41 @@ def _build_tree(cats: list[Category], counts: dict[int, int]) -> list[dict]:
 
 
 @router.get("")
-def list_categories(space_id: int, actor: Actor = Depends(get_actor), db: Session = Depends(get_db)):
+def list_categories(space_id: str, actor: Actor = Depends(get_actor), db: Session = Depends(get_db)):
+    sid = actor.space_id
     cats = (
         db.query(Category)
-        .filter(Category.space_id == space_id)
+        .filter(Category.space_id == sid)
         .order_by(Category.sort_order.asc(), Category.created_at.desc())
         .all()
     )
-    counts = _photo_counts(db, space_id)
+    counts = _photo_counts(db, sid)
     return ok(_build_tree(cats, counts))
 
 
 @router.post("")
 def create_category(
-    space_id: int,
+    space_id: str,
     payload: CategoryCreate,
     space: Space = Depends(require_leader),
     db: Session = Depends(get_db),
 ):
+    sid = space.id
     if payload.parent_id is not None:
         parent = db.get(Category, payload.parent_id)
-        if not parent or parent.space_id != space_id:
+        if not parent or parent.space_id != sid:
             raise ApiError("父分类不存在", code=404, status_code=404)
 
     # New categories sort first (created desc default): use smallest sort_order.
     min_order = (
         db.query(func.min(Category.sort_order))
-        .filter(Category.space_id == space_id, Category.parent_id == payload.parent_id)
+        .filter(Category.space_id == sid, Category.parent_id == payload.parent_id)
         .scalar()
     )
     sort_order = (min_order - 1) if min_order is not None else 0
 
     cat = Category(
-        space_id=space_id,
+        space_id=sid,
         parent_id=payload.parent_id,
         name=payload.name.strip(),
         sort_order=sort_order,
@@ -99,14 +101,15 @@ def create_category(
 
 @router.put("/{category_id}")
 def update_category(
-    space_id: int,
+    space_id: str,
     category_id: int,
     payload: CategoryUpdate,
     space: Space = Depends(require_leader),
     db: Session = Depends(get_db),
 ):
+    sid = space.id
     cat = db.get(Category, category_id)
-    if not cat or cat.space_id != space_id:
+    if not cat or cat.space_id != sid:
         raise ApiError("分类不存在", code=404, status_code=404)
 
     if payload.name is not None:
@@ -119,7 +122,7 @@ def update_category(
         if payload.parent_id == category_id:
             raise ApiError("不能将分类移动到自身下")
         parent = db.get(Category, payload.parent_id)
-        if not parent or parent.space_id != space_id:
+        if not parent or parent.space_id != sid:
             raise ApiError("目标父分类不存在", code=404, status_code=404)
         # prevent cycles
         cur = parent
@@ -137,14 +140,14 @@ def update_category(
 
 @router.put("/reorder/batch")
 def reorder_categories(
-    space_id: int,
+    space_id: str,
     payload: CategoryReorder,
     space: Space = Depends(require_leader),
     db: Session = Depends(get_db),
 ):
     id_map = {
         c.id: c
-        for c in db.query(Category).filter(Category.space_id == space_id).all()
+        for c in db.query(Category).filter(Category.space_id == space.id).all()
     }
     for item in payload.items:
         cat = id_map.get(item.id)
@@ -156,13 +159,13 @@ def reorder_categories(
 
 @router.delete("/{category_id}")
 def delete_category(
-    space_id: int,
+    space_id: str,
     category_id: int,
     space: Space = Depends(require_leader),
     db: Session = Depends(get_db),
 ):
     cat = db.get(Category, category_id)
-    if not cat or cat.space_id != space_id:
+    if not cat or cat.space_id != space.id:
         raise ApiError("分类不存在", code=404, status_code=404)
 
     photo_count = db.query(func.count(Photo.id)).filter(Photo.category_id == category_id).scalar()

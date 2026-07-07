@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 type Role = 'leader' | 'participant' | null
 
 interface SessionState {
-  spaceId: number | null
+  spaceId: string | null
   role: Role
   manageKey: string | null
   inviteCode: string | null
@@ -13,9 +13,7 @@ interface SessionState {
 
 export const useSessionStore = defineStore('session', {
   state: (): SessionState => ({
-    spaceId: localStorage.getItem('cs_space_id')
-      ? Number(localStorage.getItem('cs_space_id'))
-      : null,
+    spaceId: localStorage.getItem('cs_space_id') || null,
     role: (localStorage.getItem('cs_role') as Role) || null,
     manageKey: localStorage.getItem('cs_manage_key'),
     inviteCode: localStorage.getItem('cs_invite_code'),
@@ -31,7 +29,7 @@ export const useSessionStore = defineStore('session', {
   },
 
   actions: {
-    setLeader(spaceId: number, manageKey: string, inviteCode?: string) {
+    setLeader(spaceId: string, manageKey: string, inviteCode?: string) {
       this.spaceId = spaceId
       this.role = 'leader'
       this.manageKey = manageKey
@@ -41,7 +39,7 @@ export const useSessionStore = defineStore('session', {
       this.persist()
     },
 
-    setParticipant(spaceId: number, token: string, nickname: string) {
+    setParticipant(spaceId: string, token: string, nickname: string) {
       this.spaceId = spaceId
       this.role = 'participant'
       this.participantToken = token

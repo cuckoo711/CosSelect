@@ -9,19 +9,23 @@ from .response import ApiError
 from .security import parse_participant_token
 
 
-def get_space(space_id: int, db: Session = Depends(get_db)) -> Space:
-    space = db.get(Space, space_id)
+def resolve_space(db: Session, public_id: str) -> Space | None:
+    return db.query(Space).filter(Space.public_id == public_id).first()
+
+
+def get_space(space_id: str, db: Session = Depends(get_db)) -> Space:
+    space = resolve_space(db, space_id)
     if not space:
         raise ApiError("空间不存在", code=404, status_code=404)
     return space
 
 
 def require_leader(
-    space_id: int,
+    space_id: str,
     x_manage_key: str | None = Header(default=None, alias="X-Manage-Key"),
     db: Session = Depends(get_db),
 ) -> Space:
-    space = db.get(Space, space_id)
+    space = resolve_space(db, space_id)
     if not space:
         raise ApiError("空间不存在", code=404, status_code=404)
     if not x_manage_key or x_manage_key != space.manage_key:
@@ -47,8 +51,15 @@ def require_participant(
 class Actor:
     """Represents whoever is acting: leader or participant."""
 
-    def __init__(self, space_id: int, is_leader: bool, participant: Participant | None):
-        self.space_id = space_id
+    def __init__(
+        self,
+        space_id: int,
+        space_public_id: str,
+        is_leader: bool,
+        participant: Participant | None,
+    ):
+        self.space_id = space_id  # internal integer id (for DB queries)
+        self.space_public_id = space_public_id  # exposed id (for URLs)
         self.is_leader = is_leader
         self.participant = participant
 
@@ -62,25 +73,32 @@ class Actor:
 
 
 def get_actor(
-    space_id: int,
+    space_id: str,
     x_manage_key: str | None = Header(default=None, alias="X-Manage-Key"),
     x_participant_token: str | None = Header(default=None, alias="X-Participant-Token"),
     db: Session = Depends(get_db),
 ) -> Actor:
     """Resolve the current actor for a space: leader (manage key) or participant (token)."""
-    space = db.get(Space, space_id)
+    space = resolve_space(db, space_id)
     if not space:
         raise ApiError("空间不存在", code=404, status_code=404)
 
     if x_manage_key and x_manage_key == space.manage_key:
-        return Actor(space_id=space_id, is_leader=True, participant=None)
+        return Actor(
+            space_id=space.id, space_public_id=space.public_id, is_leader=True, participant=None
+        )
 
     if x_participant_token:
         payload = parse_participant_token(x_participant_token)
-        if payload and payload["space_id"] == space_id:
+        if payload and payload["space_id"] == space.id:
             participant = db.get(Participant, payload["participant_id"])
-            if participant and participant.space_id == space_id:
-                return Actor(space_id=space_id, is_leader=False, participant=participant)
+            if participant and participant.space_id == space.id:
+                return Actor(
+                    space_id=space.id,
+                    space_public_id=space.public_id,
+                    is_leader=False,
+                    participant=participant,
+                )
 
     raise ApiError("未授权访问", code=401, status_code=401)
 

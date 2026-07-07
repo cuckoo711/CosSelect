@@ -20,7 +20,7 @@
         <p class="cs-subtitle">输入空间 ID 与团长管理密钥</p>
         <el-form label-position="top">
           <el-form-item label="空间 ID">
-            <el-input v-model="spaceIdInput" placeholder="如 1" inputmode="numeric" />
+            <el-input v-model="spaceIdInput" placeholder="如 k7m2x9qp3a" />
           </el-form-item>
           <el-form-item label="管理密钥">
             <el-input v-model="keyInput" placeholder="创建时获得的密钥" show-password />
@@ -33,28 +33,49 @@
 
       <el-dialog v-model="showResult" title="空间创建成功" width="90%" :close-on-click-modal="false">
         <div class="result">
-          <div class="result-row">
-            <span class="label">空间 ID</span>
-            <span class="value mono">{{ created?.space_id }}</span>
-          </div>
-          <div class="result-row">
-            <span class="label">进入口令</span>
-            <span class="value mono big">{{ created?.invite_code }}</span>
-          </div>
           <div class="result-row column">
-            <span class="label">团长管理密钥（务必保存）</span>
-            <el-input :model-value="created?.manage_key" readonly>
+            <span class="label">参与者访问地址</span>
+            <el-input :model-value="accessUrl" readonly>
               <template #append>
-                <el-button @click="copyKey">复制</el-button>
+                <el-button @click="copyText(accessUrl)">复制</el-button>
               </template>
             </el-input>
           </div>
-          <el-alert type="warning" :closable="false" show-icon style="margin-top: 12px">
+          <div class="result-row column">
+            <span class="label">空间 ID</span>
+            <el-input :model-value="created?.space_id" readonly>
+              <template #append>
+                <el-button @click="copyText(created?.space_id || '')">复制</el-button>
+              </template>
+            </el-input>
+          </div>
+          <div class="result-row column">
+            <span class="label">进入口令</span>
+            <el-input :model-value="created?.invite_code" readonly class="big-input">
+              <template #append>
+                <el-button @click="copyText(created?.invite_code || '')">复制</el-button>
+              </template>
+            </el-input>
+          </div>
+          <div class="result-row column">
+            <span class="label">团长管理密钥（务必保存）</span>
+            <el-input :model-value="created?.manage_key" readonly type="textarea" :autosize="{ minRows: 2 }" />
+            <el-button size="small" text type="primary" @click="copyText(created?.manage_key || '')">
+              复制密钥
+            </el-button>
+          </div>
+          <el-alert type="warning" :closable="false" show-icon style="margin-top: 8px">
             密钥用于后续管理该空间，丢失将无法再管理。口令 24 小时有效，可随时重置。
           </el-alert>
         </div>
         <template #footer>
-          <el-button type="primary" @click="enterCreated">进入空间</el-button>
+          <div class="dialog-footer">
+            <el-button @click="copyAll">复制全部</el-button>
+            <el-button @click="downloadInfo">
+              <el-icon style="margin-right: 4px"><Download /></el-icon>下载 TXT
+            </el-button>
+            <el-button type="primary" @click="enterCreated">进入空间</el-button>
+          </div>
         </template>
       </el-dialog>
     </div>
@@ -62,11 +83,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createSpace, getSpaceInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
+import { copyText, downloadText } from '@/utils/clipboard'
 
 const router = useRouter()
 const session = useSessionStore()
@@ -74,10 +96,33 @@ const session = useSessionStore()
 const creating = ref(false)
 const entering = ref(false)
 const showResult = ref(false)
-const created = ref<{ space_id: number; invite_code: string; manage_key: string } | null>(null)
+const created = ref<{ space_id: string; invite_code: string; manage_key: string } | null>(null)
 
 const spaceIdInput = ref('')
 const keyInput = ref('')
+
+const accessUrl = computed(() => (typeof window !== 'undefined' ? window.location.origin : ''))
+
+function buildInfoText(): string {
+  const c = created.value
+  if (!c) return ''
+  return [
+    '【团片选片 - 空间信息】',
+    '',
+    `参与者访问地址：${accessUrl.value}`,
+    `空间 ID：${c.space_id}`,
+    `进入口令：${c.invite_code}（24 小时有效，可随时重置）`,
+    '',
+    '团长管理密钥（务必妥善保存，丢失将无法再管理该空间）：',
+    c.manage_key,
+    '',
+    '── 参与者操作指引 ──',
+    `1. 打开 ${accessUrl.value}`,
+    '2. 选择「我是参与者」',
+    `3. 输入口令 ${c.invite_code}`,
+    '4. 设置昵称后即可进入评分',
+  ].join('\n')
+}
 
 async function onCreate() {
   creating.value = true
@@ -96,18 +141,18 @@ function enterCreated() {
   router.push({ name: 'space', params: { spaceId: created.value.space_id } })
 }
 
-async function copyKey() {
+function copyAll() {
+  copyText(buildInfoText())
+}
+
+function downloadInfo() {
   if (!created.value) return
-  try {
-    await navigator.clipboard.writeText(created.value.manage_key)
-    ElMessage.success('已复制密钥')
-  } catch {
-    ElMessage.info('请手动长按复制')
-  }
+  downloadText(`团片选片_空间${created.value.space_id}.txt`, buildInfoText())
+  ElMessage.success('信息已下载')
 }
 
 async function onEnter() {
-  const sid = Number(spaceIdInput.value)
+  const sid = spaceIdInput.value.trim()
   if (!sid || !keyInput.value) {
     ElMessage.warning('请填写空间 ID 和管理密钥')
     return
@@ -138,14 +183,20 @@ async function onEnter() {
   align-items: stretch;
   gap: 6px;
 }
-.result-row .label {
+.result-row.column .label {
   color: var(--cs-text-dim);
-  width: 110px;
-  flex-shrink: 0;
+  font-size: 13px;
 }
-.result-row .value.big {
-  font-size: 24px;
+.big-input :deep(.el-input__inner) {
+  font-size: 20px;
   font-weight: 700;
+  letter-spacing: 2px;
   color: var(--cs-accent);
+}
+.dialog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 </style>

@@ -76,7 +76,7 @@ import PhotoGrid from '@/components/PhotoGrid.vue'
 import PhotoViewer from '@/components/PhotoViewer.vue'
 
 const props = defineProps<{ spaceId: string }>()
-const spaceId = Number(props.spaceId)
+const spaceId = props.spaceId
 const router = useRouter()
 const session = useSessionStore()
 

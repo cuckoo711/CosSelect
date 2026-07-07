@@ -43,8 +43,12 @@ check(r["code"] == 0, "create space")
 space_id = r["data"]["space_id"]
 manage_key = r["data"]["manage_key"]
 invite_code = r["data"]["invite_code"]
+check(isinstance(space_id, str) and not space_id.isdigit() and len(space_id) >= 8, "space_id is random string")
 check(len(invite_code) == 8 and invite_code.isupper() or any(c.isdigit() for c in invite_code), "invite code format")
 lead = {"X-Manage-Key": manage_key}
+
+# enumeration protection: guessing simple ids returns 404
+check(client.get("/api/spaces/1/verify", params={"code": "XXXXXXXX"}).json()["data"]["valid"] is False, "enum id 1 not valid")
 
 # create category (leader only) - without key should fail
 r = client.post(f"/api/spaces/{space_id}/categories", json={"name": "第一章"})

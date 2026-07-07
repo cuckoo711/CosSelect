@@ -65,7 +65,7 @@ import type { Comment } from '@/api/types'
 import { createComment, deleteComment, toggleLike, updateComment } from '@/api'
 
 const props = defineProps<{
-  spaceId: number
+  spaceId: string
   photoId: number
   comments: Comment[]
   isLeader: boolean

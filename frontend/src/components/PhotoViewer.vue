@@ -125,7 +125,7 @@ import CommentList from './CommentList.vue'
 
 const props = defineProps<{
   visible: boolean
-  spaceId: number
+  spaceId: string
   photos: Photo[]
   startIndex: number
   isLeader: boolean

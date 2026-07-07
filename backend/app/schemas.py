@@ -5,21 +5,21 @@ from pydantic import BaseModel, Field, field_validator
 
 # ---------- Space ----------
 class SpaceCreateResp(BaseModel):
-    space_id: int
+    space_id: str
     invite_code: str
     manage_key: str
     expire_time: datetime
 
 
 class InviteCodeResp(BaseModel):
-    space_id: int
+    space_id: str
     invite_code: str
     expire_time: datetime
 
 
 class VerifyResp(BaseModel):
     valid: bool
-    space_id: int
+    space_id: str | None
 
 
 # ---------- Category ----------
