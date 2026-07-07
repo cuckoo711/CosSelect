@@ -41,11 +41,14 @@ function mount() {
     generate()
     return
   }
+  // Thumbs are tiny (~160px JPEGs), so preload several screens ahead to avoid
+  // waiting while scrolling. Vertical margin is large; the worker pool + the
+  // generation queue keep memory/CPU bounded.
   observer = new IntersectionObserver(
     (entries) => {
       if (entries.some((e) => e.isIntersecting)) generate()
     },
-    { rootMargin: '200px' },
+    { rootMargin: '2000px 0px' },
   )
   observer.observe(root.value)
 }
