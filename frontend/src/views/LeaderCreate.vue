@@ -87,7 +87,52 @@
             <el-button @click="downloadInfo">
               <el-icon style="margin-right: 4px"><Download /></el-icon>下载 TXT
             </el-button>
-            <el-button type="primary" @click="enterCreated">进入空间</el-button>
+            <el-button type="primary" @click="openConfirm">进入空间</el-button>
+          </div>
+        </template>
+      </el-dialog>
+
+      <!-- important-notice confirmation before entering -->
+      <el-dialog
+        v-model="confirmVisible"
+        title="进入前请务必确认"
+        width="90%"
+        :close-on-click-modal="false"
+        :show-close="false"
+      >
+        <div class="notice">
+          <el-alert type="error" :closable="false" show-icon style="margin-bottom: 12px">
+            以下信息一旦丢失将无法找回，请立即保存！
+          </el-alert>
+          <ul class="notice-list">
+            <li>
+              <b>团长管理密钥</b>是你管理本空间的<b>唯一凭证</b>。系统不保存明文、无法找回，
+              丢失后将<b>永久无法管理</b>该空间（无法上传、审批、导出等）。
+            </li>
+            <li>
+              <b>团长一键管理链接</b>包含该密钥，换设备登录时用它可直接进入，请妥善保管、切勿外发。
+            </li>
+            <li>
+              <b>进入口令</b>与<b>参与者链接</b>用于团员加入，24 小时有效，可随时重置。
+            </li>
+            <li>建议将上述信息复制到备忘录，或保存我们为你生成的 TXT 文件。</li>
+          </ul>
+          <el-alert
+            v-if="!downloaded"
+            type="warning"
+            :closable="false"
+            show-icon
+            style="margin-top: 8px"
+          >
+            你还未下载信息文件，点击确认时将自动为你下载一份。
+          </el-alert>
+        </div>
+        <template #footer>
+          <div class="dialog-footer">
+            <el-button @click="confirmVisible = false">再看看</el-button>
+            <el-button type="primary" :disabled="countdown > 0" @click="confirmEnter">
+              {{ countdown > 0 ? `请阅读（${countdown}s）` : '我已知晓，进入空间' }}
+            </el-button>
           </div>
         </template>
       </el-dialog>
@@ -96,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { createSpace, getSpaceInfo } from '@/api'
@@ -110,6 +155,11 @@ const creating = ref(false)
 const entering = ref(false)
 const showResult = ref(false)
 const created = ref<{ space_id: string; invite_code: string; manage_key: string } | null>(null)
+const downloaded = ref(false)
+
+const confirmVisible = ref(false)
+const countdown = ref(0)
+let countdownTimer: number | null = null
 
 const spaceIdInput = ref('')
 const keyInput = ref('')
@@ -165,10 +215,39 @@ function copyAll() {
   copyText(buildInfoText())
 }
 
-function downloadInfo() {
+function doDownload() {
   if (!created.value) return
   downloadText(`团片选片_空间${created.value.space_id}.txt`, buildInfoText())
+  downloaded.value = true
+}
+
+function downloadInfo() {
+  doDownload()
   ElMessage.success('信息已下载')
+}
+
+function openConfirm() {
+  confirmVisible.value = true
+  countdown.value = 3
+  if (countdownTimer) window.clearInterval(countdownTimer)
+  countdownTimer = window.setInterval(() => {
+    countdown.value -= 1
+    if (countdown.value <= 0 && countdownTimer) {
+      window.clearInterval(countdownTimer)
+      countdownTimer = null
+    }
+  }, 1000)
+}
+
+function confirmEnter() {
+  if (countdown.value > 0) return
+  // force a download on first entry if the leader hasn't saved the info yet
+  if (!downloaded.value) {
+    doDownload()
+    ElMessage.success('已为你下载空间信息，请妥善保存')
+  }
+  confirmVisible.value = false
+  enterCreated()
 }
 
 async function onEnter() {
@@ -190,6 +269,10 @@ async function onEnter() {
     entering.value = false
   }
 }
+
+onUnmounted(() => {
+  if (countdownTimer) window.clearInterval(countdownTimer)
+})
 </script>
 
 <style scoped>
@@ -229,5 +312,18 @@ async function onEnter() {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+.notice-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--cs-text);
+}
+.notice-list li {
+  margin-bottom: 8px;
+}
+.notice-list b {
+  color: var(--cs-accent);
 }
 </style>
