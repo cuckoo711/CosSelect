@@ -222,9 +222,33 @@
     </el-dialog>
 
     <!-- single image viewer (for import preview) -->
-    <el-dialog v-model="viewerVisible" :title="viewFileMeta?.name || '预览'" width="92%" top="6vh">
+    <el-dialog
+      v-model="viewerVisible"
+      :title="viewerTitle"
+      width="92%"
+      top="6vh"
+      @closed="onViewerClosed"
+    >
       <div v-if="viewFileUrl" class="viewer-body">
-        <img :src="viewFileUrl" class="viewer-img" />
+        <div class="viewer-stage">
+          <el-button
+            class="nav-btn left"
+            circle
+            :disabled="viewIndex <= 0"
+            @click="viewPrev"
+          >
+            <el-icon><ArrowLeft /></el-icon>
+          </el-button>
+          <img :src="viewFileUrl" class="viewer-img" />
+          <el-button
+            class="nav-btn right"
+            circle
+            :disabled="viewIndex >= viewList.length - 1"
+            @click="viewNext"
+          >
+            <el-icon><ArrowRight /></el-icon>
+          </el-button>
+        </div>
         <div v-if="viewFileMeta" class="viewer-meta">
           <div><span class="k">文件名</span>{{ viewFileMeta.name }}</div>
           <div><span class="k">尺寸</span>{{ viewFileMeta.w }} × {{ viewFileMeta.h }} 像素（{{ viewFileMeta.mp }} MP）</div>
@@ -233,6 +257,15 @@
           <div><span class="k">修改时间</span>{{ viewFileMeta.mtime }}</div>
         </div>
       </div>
+      <template #footer>
+        <div class="viewer-footer">
+          <span class="dim small">← → 键可切换 · {{ viewIndex + 1 }}/{{ viewList.length }}</span>
+          <span class="cs-spacer" />
+          <el-button type="danger" @click="deleteCurrentView">
+            <el-icon style="margin-right: 4px"><Delete /></el-icon>删除这张
+          </el-button>
+        </div>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -240,7 +273,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import type { CategoryNode } from '@/api/types'
 import {
   approveParticipant,
@@ -515,9 +548,11 @@ function removeRoot(index: number) {
   bumpImport()
 }
 
-// ----- single image viewer -----
+// ----- single image viewer (with prev/next + delete) -----
 const viewerVisible = ref(false)
 const viewFileUrl = ref('')
+const viewList = ref<File[]>([]) // the containing folder's file array (mutable ref)
+const viewIndex = ref(0)
 const viewFileMeta = ref<{
   name: string
   w: number
@@ -528,12 +563,17 @@ const viewFileMeta = ref<{
   mtime: string
 } | null>(null)
 
+const viewerTitle = computed(() => viewFileMeta.value?.name || '预览')
+
 function fmtSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + ' MB'
   return (bytes / 1024).toFixed(0) + ' KB'
 }
 
-function viewFile(file: File) {
+function loadViewAt(index: number) {
+  const file = viewList.value[index]
+  if (!file) return
+  viewIndex.value = index
   if (viewFileUrl.value) URL.revokeObjectURL(viewFileUrl.value)
   viewFileUrl.value = URL.createObjectURL(file)
   viewFileMeta.value = {
@@ -545,7 +585,6 @@ function viewFile(file: File) {
     type: file.type,
     mtime: file.lastModified ? new Date(file.lastModified).toLocaleString('zh-CN') : '—',
   }
-  viewerVisible.value = true
   const img = new Image()
   img.onload = () => {
     if (viewFileMeta.value) {
@@ -555,6 +594,60 @@ function viewFile(file: File) {
     }
   }
   img.src = viewFileUrl.value
+}
+
+function viewFile(req: { files: File[]; index: number }) {
+  viewList.value = req.files
+  viewerVisible.value = true
+  loadViewAt(req.index)
+  window.addEventListener('keydown', onViewerKey)
+}
+
+function viewPrev() {
+  if (viewIndex.value > 0) loadViewAt(viewIndex.value - 1)
+}
+function viewNext() {
+  if (viewIndex.value < viewList.value.length - 1) loadViewAt(viewIndex.value + 1)
+}
+
+function onViewerKey(e: KeyboardEvent) {
+  if (!viewerVisible.value) return
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault()
+    viewPrev()
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault()
+    viewNext()
+  }
+}
+
+async function deleteCurrentView() {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除「${viewFileMeta.value?.name}」？此操作仅从本次导入中移除，不影响原文件。`,
+      '删除图片',
+      { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  const idx = viewIndex.value
+  viewList.value.splice(idx, 1)
+  bumpImport()
+  if (viewList.value.length === 0) {
+    viewerVisible.value = false
+    return
+  }
+  // show the next image (or the new last one)
+  loadViewAt(Math.min(idx, viewList.value.length - 1))
+}
+
+function onViewerClosed() {
+  window.removeEventListener('keydown', onViewerKey)
+  if (viewFileUrl.value) {
+    URL.revokeObjectURL(viewFileUrl.value)
+    viewFileUrl.value = ''
+  }
 }
 
 // flatten existing categories for the "import into" selector
@@ -766,6 +859,7 @@ onUnmounted(() => {
   socket?.close()
   if (pollTimer) window.clearInterval(pollTimer)
   if (viewFileUrl.value) URL.revokeObjectURL(viewFileUrl.value)
+  window.removeEventListener('keydown', onViewerKey)
 })
 </script>
 
@@ -877,12 +971,34 @@ onUnmounted(() => {
 .viewer-body {
   text-align: center;
 }
+.viewer-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .viewer-img {
   max-width: 100%;
   max-height: 60vh;
   object-fit: contain;
   border-radius: 8px;
   background: var(--cs-bg-elev2);
+}
+.nav-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+}
+.nav-btn.left {
+  left: 4px;
+}
+.nav-btn.right {
+  right: 4px;
+}
+.viewer-footer {
+  display: flex;
+  align-items: center;
 }
 .viewer-meta {
   margin-top: 12px;

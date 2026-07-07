@@ -13,6 +13,11 @@ export interface ImportNode {
   children: ImportNode[]
 }
 
+export interface ViewRequest {
+  files: File[]
+  index: number
+}
+
 const JPG_RE = /\.jpe?g$/i
 
 export function isJpeg(file: File): boolean {

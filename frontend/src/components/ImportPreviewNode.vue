@@ -19,7 +19,7 @@
           v-for="(f, i) in node.files"
           :key="fileKey(f, i)"
           :file="f"
-          @view="$emit('view', f)"
+          @view="$emit('view', { files: node.files, index: i })"
           @remove="removeFile(i)"
         />
       </div>
@@ -40,14 +40,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { ImportNode } from '@/utils/folderImport'
+import type { ImportNode, ViewRequest } from '@/utils/folderImport'
 import { countFiles } from '@/utils/folderImport'
 import ImportThumb from './ImportThumb.vue'
 
 const props = defineProps<{ node: ImportNode; depth: number }>()
 const emit = defineEmits<{
   (e: 'remove'): void
-  (e: 'view', file: File): void
+  (e: 'view', req: ViewRequest): void
   (e: 'changed'): void
 }>()
 
