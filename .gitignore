@@ -1,2 +1,21 @@
 .narrafork/
 .worktrees/
+
+# env
+.env
+
+# python
+backend/.venv/
+**/__pycache__/
+*.pyc
+backend/_smoke_test.db
+
+# node
+frontend/node_modules/
+frontend/dist/
+
+# data
+data/
+
+# python build artifacts
+backend/*.egg-info/

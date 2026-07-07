@@ -1,0 +1,96 @@
+:root {
+  --cs-bg: #101010;
+  --cs-bg-elev: #1a1a1a;
+  --cs-bg-elev2: #242424;
+  --cs-border: #333;
+  --cs-text: #e8e8e8;
+  --cs-text-dim: #9a9a9a;
+  --cs-accent: #00a4dc; /* Jellyfin blue */
+  --cs-accent-2: #aa5cc3;
+  --cs-danger: #f56c6c;
+  --cs-warning: #e6a23c;
+  --cs-star: #ffcd3c;
+}
+
+html,
+body,
+#app {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: var(--cs-bg);
+  color: var(--cs-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: var(--cs-accent);
+  text-decoration: none;
+}
+
+.cs-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--cs-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.cs-container {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.cs-card {
+  background: var(--cs-bg-elev);
+  border: 1px solid var(--cs-border);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.cs-title {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.cs-subtitle {
+  color: var(--cs-text-dim);
+  font-size: 13px;
+  margin: 0 0 20px;
+}
+
+.cs-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cs-spacer {
+  flex: 1;
+}
+
+/* Element Plus dark overrides */
+.el-message {
+  min-width: 240px;
+}
+
+/* Hide scrollbars on mobile grid but keep scroll */
+.cs-scroll {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mono {
+  font-family: 'SF Mono', 'Fira Code', Consolas, monospace;
+  letter-spacing: 2px;
+}

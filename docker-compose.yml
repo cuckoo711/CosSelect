@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cosselect}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cosselect}
+      POSTGRES_DB: ${POSTGRES_DB:-cosselect}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cosselect}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-cosselect}:${POSTGRES_PASSWORD:-cosselect}@postgres:5432/${POSTGRES_DB:-cosselect}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY:-please-change-this-secret}
+      DATA_DIR: /data/spaces
+      INVITE_CODE_TTL_HOURS: ${INVITE_CODE_TTL_HOURS:-24}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+    volumes:
+      - photodata:/data/spaces
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    command: celery -A app.celery_app.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-cosselect}:${POSTGRES_PASSWORD:-cosselect}@postgres:5432/${POSTGRES_DB:-cosselect}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      SECRET_KEY: ${SECRET_KEY:-please-change-this-secret}
+      DATA_DIR: /data/spaces
+    volumes:
+      - photodata:/data/spaces
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${HTTP_PORT:-8080}:80"
+
+volumes:
+  pgdata:
+  redisdata:
+  photodata:
