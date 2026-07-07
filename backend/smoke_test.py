@@ -50,6 +50,12 @@ lead = {"X-Manage-Key": manage_key}
 # enumeration protection: guessing simple ids returns 404
 check(client.get("/api/spaces/1/verify", params={"code": "XXXXXXXX"}).json()["data"]["valid"] is False, "enum id 1 not valid")
 
+# new spaces default to require_approval=True; disable it for the main flow tests
+r = client.get(f"/api/spaces/{space_id}/info", headers=lead).json()
+check(r["data"]["require_approval"] is True, "new space requires approval by default")
+r = client.put(f"/api/spaces/{space_id}/settings/approval", json={"require_approval": False}, headers=lead).json()
+check(r["code"] == 0 and r["data"]["require_approval"] is False, "disable approval for main space")
+
 # create category (leader only) - without key should fail
 r = client.post(f"/api/spaces/{space_id}/categories", json={"name": "第一章"})
 check(r.json()["code"] == 403, "category create denied without key")
@@ -199,5 +205,52 @@ check(r["data"]["valid"] is False, "old code invalid after regen")
 # data preserved after regen: participant still has rating
 r = client.get(f"/api/spaces/{space_id}/photos/{photo_ids[0]}", headers=part).json()
 check(r["data"]["my_score"] == 5.0, "data preserved after regen")
+
+# ---------------- Approval flow (separate space, approval ON) ----------------
+sp = client.post("/api/spaces").json()["data"]
+asid = sp["space_id"]
+amk = sp["manage_key"]
+alead = {"X-Manage-Key": amk}
+acat = client.post(f"/api/spaces/{asid}/categories", json={"name": "章"}, headers=alead).json()["data"]["id"]
+# upload one photo to rate later
+af = [("files", ("x.png", make_png_bytes((1, 2, 3)), "image/png"))]
+apid = client.post(f"/api/spaces/{asid}/photos/upload", data={"category_id": acat}, files=af, headers=alead).json()["data"]["photos"][0]["id"]
+
+# participant joins -> pending
+r = client.post(f"/api/spaces/{asid}/participants", json={"nickname": "待审"}).json()
+check(r["data"]["status"] == "pending", "join -> pending when approval on")
+apart_id = r["data"]["participant_id"]
+atok = {"X-Participant-Token": r["data"]["token"]}
+
+# pending participant cannot rate (428)
+r = client.post(f"/api/spaces/{asid}/photos/{apid}/ratings", json={"score": 3.0}, headers=atok).json()
+check(r["code"] == 428, "pending cannot rate")
+
+# leader sees pending list
+r = client.get(f"/api/spaces/{asid}/participants-list", params={"status": "pending"}, headers=alead).json()
+check(r["code"] == 0 and len(r["data"]) == 1 and r["data"][0]["participant_id"] == apart_id, "leader sees pending list")
+
+# status poll
+r = client.get(f"/api/spaces/{asid}/participants/me/status", params={"nickname": "待审"}).json()
+check(r["data"]["status"] == "pending", "status poll pending")
+
+# leader approves
+r = client.post(f"/api/spaces/{asid}/participants/{apart_id}/approve", headers=alead).json()
+check(r["code"] == 0 and r["data"]["status"] == "approved", "leader approve")
+
+# now participant can rate
+r = client.post(f"/api/spaces/{asid}/photos/{apid}/ratings", json={"score": 3.0}, headers=atok).json()
+check(r["code"] == 0 and r["data"]["avg_score"] == 3.0, "approved can rate")
+
+# reject flow
+r = client.post(f"/api/spaces/{asid}/participants", json={"nickname": "被拒"}).json()
+rej_id = r["data"]["participant_id"]
+rej_tok = {"X-Participant-Token": r["data"]["token"]}
+client.post(f"/api/spaces/{asid}/participants/{rej_id}/reject", headers=alead)
+r = client.post(f"/api/spaces/{asid}/photos/{apid}/ratings", json={"score": 2.0}, headers=rej_tok).json()
+check(r["code"] == 403, "rejected cannot rate")
+# rejected can re-apply -> back to pending
+r = client.post(f"/api/spaces/{asid}/participants", json={"nickname": "被拒"}).json()
+check(r["data"]["status"] == "pending", "rejected re-apply -> pending")
 
 print("\nALL SMOKE TESTS PASSED")

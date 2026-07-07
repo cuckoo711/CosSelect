@@ -33,6 +33,19 @@
 
       <el-dialog v-model="showResult" title="空间创建成功" width="90%" :close-on-click-modal="false">
         <div class="result">
+          <div class="result-row column highlight">
+            <span class="label">🔗 参与者一键进入链接（发给团员）</span>
+            <el-input :model-value="participantLink" readonly type="textarea" :autosize="{ minRows: 2 }" />
+            <el-button size="small" type="primary" @click="copyText(participantLink)">
+              复制参与者链接
+            </el-button>
+          </div>
+          <div class="result-row column highlight">
+            <span class="label">👑 团长一键管理链接（仅自己保存）</span>
+            <el-input :model-value="leaderLink" readonly type="textarea" :autosize="{ minRows: 2 }" />
+            <el-button size="small" @click="copyText(leaderLink)">复制团长链接</el-button>
+          </div>
+          <el-divider style="margin: 8px 0">或手动分享以下信息</el-divider>
           <div class="result-row column">
             <span class="label">参与者访问地址</span>
             <el-input :model-value="accessUrl" readonly>
@@ -102,6 +115,14 @@ const spaceIdInput = ref('')
 const keyInput = ref('')
 
 const accessUrl = computed(() => (typeof window !== 'undefined' ? window.location.origin : ''))
+const participantLink = computed(() =>
+  created.value ? `${accessUrl.value}/?code=${created.value.invite_code}` : '',
+)
+const leaderLink = computed(() =>
+  created.value
+    ? `${accessUrl.value}/?sid=${created.value.space_id}&key=${created.value.manage_key}`
+    : '',
+)
 
 function buildInfoText(): string {
   const c = created.value
@@ -109,18 +130,17 @@ function buildInfoText(): string {
   return [
     '【团片选片 - 空间信息】',
     '',
-    `参与者访问地址：${accessUrl.value}`,
+    '参与者一键进入链接（发给团员，打开后设置 CN 即可）：',
+    participantLink.value,
+    '',
     `空间 ID：${c.space_id}`,
     `进入口令：${c.invite_code}（24 小时有效，可随时重置）`,
+    `参与者访问地址：${accessUrl.value}`,
     '',
+    '团长一键管理链接（仅自己保存，勿外发）：',
+    leaderLink.value,
     '团长管理密钥（务必妥善保存，丢失将无法再管理该空间）：',
     c.manage_key,
-    '',
-    '── 参与者操作指引 ──',
-    `1. 打开 ${accessUrl.value}`,
-    '2. 选择「我是参与者」',
-    `3. 输入口令 ${c.invite_code}`,
-    '4. 设置昵称后即可进入评分',
   ].join('\n')
 }
 
@@ -186,6 +206,17 @@ async function onEnter() {
 .result-row.column .label {
   color: var(--cs-text-dim);
   font-size: 13px;
+}
+.result-row.highlight {
+  background: color-mix(in srgb, var(--cs-accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--cs-accent) 30%, transparent);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.result-row.highlight .label {
+  color: var(--cs-text);
+  font-weight: 600;
 }
 .big-input :deep(.el-input__inner) {
   font-size: 20px;

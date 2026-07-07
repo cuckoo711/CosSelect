@@ -35,11 +35,38 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { getSpaceInfo } from '@/api'
 import { useSessionStore } from '@/stores/session'
 
+const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
+
+onMounted(async () => {
+  const q = route.query
+  // Leader one-click link: /?sid=xxx&key=yyy
+  if (q.sid && q.key) {
+    const sid = String(q.sid)
+    const key = String(q.key)
+    session.setLeader(sid, key)
+    try {
+      const info = await getSpaceInfo(sid)
+      session.setInviteCode(info.invite_code)
+      router.replace({ name: 'space', params: { spaceId: sid } })
+      return
+    } catch {
+      session.logout()
+      ElMessage.error('团长链接无效或已失效')
+    }
+  }
+  // Participant one-click link: /?code=XXXX
+  if (q.code) {
+    router.replace({ name: 'join', query: { code: String(q.code) } })
+  }
+})
 
 function goLeader() {
   router.push({ name: 'leader-create' })

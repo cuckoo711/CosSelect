@@ -24,6 +24,7 @@ class Space(Base):
     public_id: Mapped[str] = mapped_column(String(16), unique=True, index=True, nullable=False)
     invite_code: Mapped[str] = mapped_column(String(8), nullable=False)
     manage_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    require_approval: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expire_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -80,6 +81,8 @@ class Participant(Base):
         ForeignKey("spaces.id", ondelete="CASCADE"), nullable=False, index=True
     )
     nickname: Mapped[str] = mapped_column(String(50), nullable=False)
+    # approval status: pending / approved / rejected
+    status: Mapped[str] = mapped_column(String(16), default="approved", nullable=False)
     join_time: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     space: Mapped["Space"] = relationship(back_populates="participants")

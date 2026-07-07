@@ -6,6 +6,12 @@ const routes: RouteRecordRaw[] = [
   { path: '/leader/create', name: 'leader-create', component: () => import('@/views/LeaderCreate.vue') },
   { path: '/join', name: 'join', component: () => import('@/views/JoinSpace.vue') },
   {
+    path: '/space/:spaceId/waiting',
+    name: 'waiting',
+    component: () => import('@/views/WaitingApproval.vue'),
+    props: true,
+  },
+  {
     path: '/space/:spaceId',
     name: 'space',
     component: () => import('@/views/SpaceHome.vue'),
@@ -34,6 +40,14 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const session = useSessionStore()
+  // waiting page: must be an authed (not-yet-approved) participant of the space
+  if (to.name === 'waiting') {
+    const sid = String(to.params.spaceId)
+    if (!session.authed || session.spaceId !== sid || session.isLeader) {
+      return { name: 'portal' }
+    }
+    return true
+  }
   // guard space routes: must be authed for that space
   if (to.name === 'space' || to.meta.leader) {
     const sid = String(to.params.spaceId)
@@ -42,6 +56,10 @@ router.beforeEach((to) => {
     }
     if (to.meta.leader && !session.isLeader) {
       return { name: 'space', params: { spaceId: sid } }
+    }
+    // participant not yet approved -> waiting page
+    if (session.isParticipant && !session.approved) {
+      return { name: 'waiting', params: { spaceId: sid } }
     }
   }
   return true

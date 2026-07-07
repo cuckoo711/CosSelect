@@ -19,13 +19,40 @@
           <span class="cs-spacer" />
           <el-button @click="onRegen" :loading="regenerating">重置口令</el-button>
         </div>
-        <div class="cs-row" style="margin-top: 12px; gap: 8px">
-          <el-button size="small" @click="copyText(accessUrl)">复制访问地址</el-button>
+        <div class="cs-row" style="margin-top: 12px; gap: 8px; flex-wrap: wrap">
+          <el-button size="small" type="primary" @click="copyText(participantLink)">
+            复制参与者链接
+          </el-button>
+          <el-button size="small" @click="copyText(leaderLink)">复制团长链接</el-button>
           <el-button size="small" @click="copyText(inviteCode)">复制口令</el-button>
           <el-button size="small" @click="downloadInfo">
-            <el-icon style="margin-right: 4px"><Download /></el-icon>下载信息 TXT
+            <el-icon style="margin-right: 4px"><Download /></el-icon>下载 TXT
           </el-button>
         </div>
+      </div>
+
+      <!-- approval management -->
+      <div class="cs-card" style="margin-bottom: 16px">
+        <div class="cs-row" style="margin-bottom: 10px">
+          <b>成员审批</b>
+          <el-badge :value="pending.length" :hidden="pending.length === 0" style="margin-left: 8px" />
+          <span class="cs-spacer" />
+          <span class="dim small" style="margin-right: 8px">加入需审批</span>
+          <el-switch v-model="requireApproval" @change="onToggleApproval" />
+        </div>
+
+        <div v-if="!requireApproval" class="dim small">已关闭审批，参与者输入口令设置 CN 后可直接进入。</div>
+
+        <template v-else>
+          <div v-if="pending.length === 0" class="dim small">暂无待审批的加入申请。</div>
+          <div v-for="p in pending" :key="p.participant_id" class="approve-row">
+            <span class="cn">{{ p.nickname }}</span>
+            <span class="dim small">{{ fmtTime(p.join_time) }}</span>
+            <span class="cs-spacer" />
+            <el-button size="small" type="success" @click="onApprove(p.participant_id)">通过</el-button>
+            <el-button size="small" type="danger" plain @click="onReject(p.participant_id)">拒绝</el-button>
+          </div>
+        </template>
       </div>
 
       <!-- add category -->
@@ -101,48 +128,104 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import type { CategoryNode } from '@/api/types'
 import {
+  approveParticipant,
   createCategory,
   deleteCategory,
   getSpaceInfo,
   listCategories,
+  listPendingParticipants,
   regenerateCode,
+  rejectParticipant,
   reorderCategories,
+  setApprovalSetting,
   updateCategory,
   uploadPhotos,
 } from '@/api'
 import { copyText, downloadText } from '@/utils/clipboard'
 import { compressImage } from '@/utils/image'
+import { useSessionStore } from '@/stores/session'
+import { SpaceSocket, type WsMessage } from '@/utils/ws'
 
 const props = defineProps<{ spaceId: string }>()
 const spaceId = props.spaceId
 const router = useRouter()
+const session = useSessionStore()
 
 const treeData = ref<CategoryNode[]>([])
 const inviteCode = ref('')
 const expireText = ref('')
 const regenerating = ref(false)
 
+const requireApproval = ref(true)
+const pending = ref<{ participant_id: number; nickname: string; status: string; join_time: string }[]>([])
+let socket: SpaceSocket | null = null
+let pollTimer: number | null = null
+
 const accessUrl = typeof window !== 'undefined' ? window.location.origin : ''
+const participantLink = computed(() => `${accessUrl}/?code=${inviteCode.value}`)
+const leaderLink = computed(() => `${accessUrl}/?sid=${spaceId}&key=${session.manageKey || ''}`)
+
+function fmtTime(s: string) {
+  const d = new Date(s.endsWith('Z') ? s : s + 'Z')
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+async function loadPending() {
+  try {
+    pending.value = await listPendingParticipants(spaceId, 'pending')
+  } catch {
+    /* ignore */
+  }
+}
+
+async function onToggleApproval(val: boolean) {
+  try {
+    await setApprovalSetting(spaceId, val)
+    ElMessage.success(val ? '已开启加入审批' : '已关闭加入审批')
+    if (val) loadPending()
+  } catch {
+    requireApproval.value = !val
+  }
+}
+
+async function onApprove(id: number) {
+  await approveParticipant(spaceId, id)
+  pending.value = pending.value.filter((p) => p.participant_id !== id)
+  ElMessage.success('已通过')
+}
+
+async function onReject(id: number) {
+  await rejectParticipant(spaceId, id)
+  pending.value = pending.value.filter((p) => p.participant_id !== id)
+  ElMessage.info('已拒绝')
+}
+
+function handleWs(msg: WsMessage) {
+  if (msg.type === 'join_request') {
+    loadPending()
+  }
+}
 
 function downloadInfo() {
   const text = [
     '【团片选片 - 空间信息】',
     '',
-    `参与者访问地址：${accessUrl}`,
+    '参与者一键进入链接（发给团员，打开后设置 CN 即可）：',
+    participantLink.value,
+    '',
     `空间 ID：${spaceId}`,
     `进入口令：${inviteCode.value}（24 小时有效，可随时重置）`,
     expireText.value ? `口令到期：${expireText.value}` : '',
+    `参与者访问地址：${accessUrl}`,
     '',
-    '── 参与者操作指引 ──',
-    `1. 打开 ${accessUrl}`,
-    '2. 选择「我是参与者」',
-    `3. 输入口令 ${inviteCode.value}`,
-    '4. 设置昵称后即可进入评分',
+    '团长一键管理链接（仅自己保存，勿外发）：',
+    leaderLink.value,
   ]
     .filter((l) => l !== '')
     .join('\n')
@@ -181,6 +264,7 @@ async function loadInfo() {
     const info = await getSpaceInfo(spaceId)
     inviteCode.value = info.invite_code
     expireText.value = new Date(info.expire_time + 'Z').toLocaleString('zh-CN')
+    requireApproval.value = info.require_approval
   } catch {
     /* ignore */
   }
@@ -293,6 +377,18 @@ async function onDrop(_dragging: any, _drop: any, _pos: string) {
 onMounted(() => {
   loadTree()
   loadInfo()
+  loadPending()
+  socket = new SpaceSocket(spaceId, handleWs)
+  socket.connect()
+  // polling fallback for pending list
+  pollTimer = window.setInterval(() => {
+    if (requireApproval.value) loadPending()
+  }, 10000)
+})
+
+onUnmounted(() => {
+  socket?.close()
+  if (pollTimer) window.clearInterval(pollTimer)
 })
 </script>
 
@@ -308,6 +404,16 @@ onMounted(() => {
 }
 .small {
   font-size: 12px;
+}
+.approve-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--cs-border);
+}
+.approve-row .cn {
+  font-weight: 600;
 }
 .code {
   font-size: 26px;

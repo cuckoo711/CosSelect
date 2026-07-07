@@ -9,6 +9,7 @@ interface SessionState {
   inviteCode: string | null
   participantToken: string | null
   nickname: string | null
+  status: string | null // participant approval status
 }
 
 export const useSessionStore = defineStore('session', {
@@ -19,6 +20,7 @@ export const useSessionStore = defineStore('session', {
     inviteCode: localStorage.getItem('cs_invite_code'),
     participantToken: localStorage.getItem('cs_participant_token'),
     nickname: localStorage.getItem('cs_nickname'),
+    status: localStorage.getItem('cs_status'),
   }),
 
   getters: {
@@ -26,6 +28,7 @@ export const useSessionStore = defineStore('session', {
     isParticipant: (s) => s.role === 'participant',
     displayName: (s) => (s.role === 'leader' ? '团长' : s.nickname || ''),
     authed: (s) => !!s.spaceId && !!s.role,
+    approved: (s) => s.role === 'leader' || s.status === 'approved',
   },
 
   actions: {
@@ -36,16 +39,23 @@ export const useSessionStore = defineStore('session', {
       if (inviteCode) this.inviteCode = inviteCode
       this.participantToken = null
       this.nickname = null
+      this.status = null
       this.persist()
     },
 
-    setParticipant(spaceId: string, token: string, nickname: string) {
+    setParticipant(spaceId: string, token: string, nickname: string, status: string) {
       this.spaceId = spaceId
       this.role = 'participant'
       this.participantToken = token
       this.nickname = nickname
+      this.status = status
       this.manageKey = null
       this.persist()
+    },
+
+    setStatus(status: string) {
+      this.status = status
+      localStorage.setItem('cs_status', status)
     },
 
     setInviteCode(code: string) {
@@ -62,6 +72,7 @@ export const useSessionStore = defineStore('session', {
       set('cs_invite_code', this.inviteCode)
       set('cs_participant_token', this.participantToken)
       set('cs_nickname', this.nickname)
+      set('cs_status', this.status)
     },
 
     logout() {
@@ -71,7 +82,8 @@ export const useSessionStore = defineStore('session', {
       this.inviteCode = null
       this.participantToken = null
       this.nickname = null
-      ;['cs_space_id', 'cs_role', 'cs_manage_key', 'cs_invite_code', 'cs_participant_token', 'cs_nickname'].forEach(
+      this.status = null
+      ;['cs_space_id', 'cs_role', 'cs_manage_key', 'cs_invite_code', 'cs_participant_token', 'cs_nickname', 'cs_status'].forEach(
         (k) => localStorage.removeItem(k),
       )
     },

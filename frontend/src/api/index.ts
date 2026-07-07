@@ -22,16 +22,57 @@ export const verifyCodeGlobal = (code: string) =>
   })
 
 export const getSpaceInfo = (spaceId: string) =>
-  request<{ space_id: string; invite_code: string; expire_time: string; expired: boolean }>({
+  request<{
+    space_id: string
+    invite_code: string
+    expire_time: string
+    expired: boolean
+    require_approval: boolean
+  }>({
     url: `/api/spaces/${spaceId}/info`,
   })
 
 // ---------- Participants ----------
 export const joinSpace = (spaceId: string, nickname: string) =>
-  request<{ participant_id: number; nickname: string; token: string; is_new: boolean }>({
+  request<{
+    participant_id: number
+    nickname: string
+    token: string
+    is_new: boolean
+    status: string
+  }>({
     url: `/api/spaces/${spaceId}/participants`,
     method: 'post',
     data: { nickname },
+  })
+
+export const getMyStatus = (spaceId: string, nickname: string) =>
+  request<{ status: string; participant_id?: number }>({
+    url: `/api/spaces/${spaceId}/participants/me/status`,
+    params: { nickname },
+  }, true)
+
+// ---------- Approvals (leader) ----------
+export const listPendingParticipants = (
+  spaceId: string,
+  status: 'pending' | 'approved' | 'rejected' | 'all' = 'pending',
+) =>
+  request<{ participant_id: number; nickname: string; status: string; join_time: string }[]>({
+    url: `/api/spaces/${spaceId}/participants-list`,
+    params: { status },
+  })
+
+export const approveParticipant = (spaceId: string, participantId: number) =>
+  request({ url: `/api/spaces/${spaceId}/participants/${participantId}/approve`, method: 'post' })
+
+export const rejectParticipant = (spaceId: string, participantId: number) =>
+  request({ url: `/api/spaces/${spaceId}/participants/${participantId}/reject`, method: 'post' })
+
+export const setApprovalSetting = (spaceId: string, requireApproval: boolean) =>
+  request<{ require_approval: boolean }>({
+    url: `/api/spaces/${spaceId}/settings/approval`,
+    method: 'put',
+    data: { require_approval: requireApproval },
   })
 
 // ---------- Categories ----------

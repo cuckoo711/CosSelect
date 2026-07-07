@@ -4,7 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import init_db
 from .response import ok, register_exception_handlers
+from . import ws
 from .routers import (
+    approvals,
     categories,
     detail,
     interactions,
@@ -41,7 +43,9 @@ def health():
 app.include_router(spaces.router)
 app.include_router(categories.router)
 app.include_router(participants.router)
+app.include_router(approvals.router)
 app.include_router(photos.router)
 app.include_router(detail.router)
 app.include_router(interactions.router)
 app.include_router(stats.router)
+app.include_router(ws.router)

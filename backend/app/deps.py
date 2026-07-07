@@ -45,7 +45,15 @@ def require_participant(
     participant = db.get(Participant, payload["participant_id"])
     if not participant or participant.space_id != payload["space_id"]:
         raise ApiError("身份不存在", code=401, status_code=401)
+    _ensure_approved(participant)
     return participant
+
+
+def _ensure_approved(participant: Participant):
+    if participant.status == "pending":
+        raise ApiError("等待团长审批中", code=428, status_code=428)
+    if participant.status == "rejected":
+        raise ApiError("加入申请已被拒绝", code=403, status_code=403)
 
 
 class Actor:
@@ -93,6 +101,7 @@ def get_actor(
         if payload and payload["space_id"] == space.id:
             participant = db.get(Participant, payload["participant_id"])
             if participant and participant.space_id == space.id:
+                _ensure_approved(participant)
                 return Actor(
                     space_id=space.id,
                     space_public_id=space.public_id,

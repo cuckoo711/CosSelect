@@ -8,7 +8,7 @@
       <div class="cs-card" style="margin-top: 16px">
         <el-steps :active="step" align-center finish-status="success" style="margin-bottom: 24px">
           <el-step title="输入口令" />
-          <el-step title="设置昵称" />
+          <el-step title="设置 CN" />
         </el-steps>
 
         <template v-if="step === 0">
@@ -30,12 +30,12 @@
 
         <template v-else>
           <el-form label-position="top">
-            <el-form-item label="你的昵称（本空间唯一）">
-              <el-input v-model="nickname" placeholder="如 摄影师小王" maxlength="50" />
+            <el-form-item label="你的 CN（圈名，本空间唯一）">
+              <el-input v-model="nickname" placeholder="如 阿白" maxlength="50" />
             </el-form-item>
           </el-form>
           <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
-            相同昵称再次进入会自动恢复你的评分、批注与喜欢记录。
+            相同 CN 再次进入会自动恢复你的评分、批注与喜欢记录。
           </el-alert>
           <el-button type="primary" size="large" :loading="joining" @click="onJoin" style="width: 100%">
             进入空间
@@ -48,12 +48,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { joinSpace, verifyCodeGlobal } from '@/api'
 import { useSessionStore } from '@/stores/session'
 
+const route = useRoute()
 const router = useRouter()
 const session = useSessionStore()
 
@@ -63,6 +64,15 @@ const nickname = ref('')
 const verifying = ref(false)
 const joining = ref(false)
 const verifiedSpaceId = ref<string | null>(null)
+
+onMounted(() => {
+  // Auto-fill invite code from URL: /join?code=XXXX or /?code=XXXX
+  const c = (route.query.code as string) || ''
+  if (c) {
+    code.value = c.toUpperCase().trim()
+    onVerify()
+  }
+})
 
 async function onVerify() {
   if (code.value.length !== 8) {
@@ -86,7 +96,7 @@ async function onVerify() {
 async function onJoin() {
   const name = nickname.value.trim()
   if (!name) {
-    ElMessage.warning('请输入昵称')
+    ElMessage.warning('请输入 CN')
     return
   }
   if (!verifiedSpaceId.value) {
@@ -96,10 +106,15 @@ async function onJoin() {
   joining.value = true
   try {
     const data = await joinSpace(verifiedSpaceId.value, name)
-    session.setParticipant(verifiedSpaceId.value, data.token, data.nickname)
+    session.setParticipant(verifiedSpaceId.value, data.token, data.nickname, data.status)
     session.setInviteCode(code.value.trim())
-    ElMessage.success(data.is_new ? '欢迎加入' : '已恢复你的历史记录')
-    router.push({ name: 'space', params: { spaceId: verifiedSpaceId.value } })
+    if (data.status === 'approved') {
+      ElMessage.success(data.is_new ? '欢迎加入' : '已恢复你的历史记录')
+      router.push({ name: 'space', params: { spaceId: verifiedSpaceId.value } })
+    } else {
+      // pending -> waiting page
+      router.push({ name: 'waiting', params: { spaceId: verifiedSpaceId.value } })
+    }
   } finally {
     joining.value = false
   }

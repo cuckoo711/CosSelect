@@ -7,8 +7,20 @@ from ..models import Participant, Space
 from ..response import ok
 from ..schemas import ParticipantJoin, ParticipantResp
 from ..security import make_participant_token
+from ..ws import manager
 
 router = APIRouter(prefix="/api/spaces/{space_id}/participants", tags=["participants"])
+
+
+def _resp(participant: Participant, sid: int, is_new: bool) -> dict:
+    token = make_participant_token(sid, participant.id)
+    return ParticipantResp(
+        participant_id=participant.id,
+        nickname=participant.nickname,
+        token=token,
+        is_new=is_new,
+        status=participant.status,
+    ).model_dump()
 
 
 @router.post("")
@@ -28,30 +40,23 @@ def join_space(
         .first()
     )
     if existing:
-        # Same nickname -> restore identity.
-        token = make_participant_token(sid, existing.id)
-        return ok(
-            ParticipantResp(
-                participant_id=existing.id,
-                nickname=existing.nickname,
-                token=token,
-                is_new=False,
-            ).model_dump()
-        )
+        # Rejected participants may re-apply -> reset to pending (if approval on).
+        if existing.status == "rejected":
+            existing.status = "pending" if space.require_approval else "approved"
+            db.commit()
+            db.refresh(existing)
+            if existing.status == "pending":
+                _notify_new_request(space.public_id, existing)
+        return ok(_resp(existing, sid, is_new=False))
 
-    participant = Participant(space_id=sid, nickname=nickname)
+    status = "pending" if space.require_approval else "approved"
+    participant = Participant(space_id=sid, nickname=nickname, status=status)
     db.add(participant)
     db.commit()
     db.refresh(participant)
-    token = make_participant_token(sid, participant.id)
-    return ok(
-        ParticipantResp(
-            participant_id=participant.id,
-            nickname=participant.nickname,
-            token=token,
-            is_new=True,
-        ).model_dump()
-    )
+    if status == "pending":
+        _notify_new_request(space.public_id, participant)
+    return ok(_resp(participant, sid, is_new=True))
 
 
 @router.get("/{nickname}")
@@ -68,12 +73,38 @@ def get_participant(
     )
     if not participant:
         return ok({"exists": False})
-    token = make_participant_token(space.id, participant.id)
     return ok(
         {
             "exists": True,
+            **_resp(participant, space.id, is_new=False),
+        }
+    )
+
+
+@router.get("/me/status")
+def my_status(
+    space_id: str,
+    space: Space = Depends(get_space),
+    nickname: str = "",
+    db: Session = Depends(get_db),
+):
+    """Poll a participant's approval status by nickname (fallback for WS)."""
+    participant = (
+        db.query(Participant)
+        .filter(Participant.space_id == space.id, Participant.nickname == nickname)
+        .first()
+    )
+    if not participant:
+        return ok({"status": "none"})
+    return ok({"status": participant.status, "participant_id": participant.id})
+
+
+def _notify_new_request(space_pid: str, participant: Participant):
+    manager.broadcast_threadsafe(
+        space_pid,
+        {
+            "type": "join_request",
             "participant_id": participant.id,
             "nickname": participant.nickname,
-            "token": token,
-        }
+        },
     )

@@ -71,6 +71,14 @@ class ParticipantResp(BaseModel):
     nickname: str
     token: str
     is_new: bool
+    status: str = "approved"
+
+
+class ApprovalItem(BaseModel):
+    participant_id: int
+    nickname: str
+    status: str
+    join_time: datetime
 
 
 # ---------- Photo ----------

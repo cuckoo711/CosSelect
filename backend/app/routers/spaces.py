@@ -82,6 +82,7 @@ def space_info(space_id: str, space: Space = Depends(require_leader)):
             "invite_code": space.invite_code,
             "expire_time": space.expire_time.isoformat(),
             "expired": space.expire_time < datetime.utcnow(),
+            "require_approval": space.require_approval,
         }
     )
 
