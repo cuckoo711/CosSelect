@@ -253,4 +253,35 @@ check(r["code"] == 403, "rejected cannot rate")
 r = client.post(f"/api/spaces/{asid}/participants", json={"nickname": "被拒"}).json()
 check(r["data"]["status"] == "pending", "rejected re-apply -> pending")
 
+# ---------------- Inactivity auto-destroy ----------------
+# info exposes last_access + thresholds
+r = client.get(f"/api/spaces/{space_id}/info", headers=lead).json()["data"]
+check(r.get("last_access_at") is not None, "info exposes last_access_at")
+check(r.get("inactive_notice_days") == 30 and r.get("inactive_destroy_days") == 90, "info exposes thresholds")
+
+# create a fresh space, backdate its last_access beyond destroy threshold, run cleanup
+import datetime as _dt
+from app.database import SessionLocal as _SL2
+from app.models import Space as _Space2
+from app.cleanup import cleanup_inactive_spaces
+
+sp2 = client.post("/api/spaces").json()["data"]
+stale_pid = sp2["space_id"]
+_db2 = _SL2()
+_sp = _db2.query(_Space2).filter(_Space2.public_id == stale_pid).first()
+stale_int_id = _sp.id
+_sp.last_access_at = _dt.datetime.utcnow() - _dt.timedelta(days=100)
+_db2.commit()
+_db2.close()
+
+# a fresh (active) space should survive; the stale one should be destroyed
+removed = cleanup_inactive_spaces()
+check(removed >= 1, "cleanup removed at least the stale space")
+_db3 = _SL2()
+gone = _db3.query(_Space2).filter(_Space2.id == stale_int_id).first() is None
+still = _db3.query(_Space2).filter(_Space2.public_id == space_id).first() is not None
+_db3.close()
+check(gone, "stale space destroyed")
+check(still, "active space preserved")
+
 print("\nALL SMOKE TESTS PASSED")

@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     # Invite code
     invite_code_ttl_hours: int = 24
 
+    # Inactivity policy
+    inactive_notice_days: int = 30  # shown to leaders as the warning threshold
+    inactive_destroy_days: int = 90  # actual server-side auto-destroy threshold
+    cleanup_interval_hours: int = 24  # how often the cleanup task runs
+
     # Thumbnail
     thumbnail_max_width: int = 1200
     thumbnail_max_bytes: int = 500 * 1024

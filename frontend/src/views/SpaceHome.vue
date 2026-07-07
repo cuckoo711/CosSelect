@@ -69,7 +69,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { CategoryNode, Photo, SortKey } from '@/api/types'
-import { deletePhoto, listCategories, listPhotos } from '@/api'
+import { deletePhoto, getSpaceInfo, listCategories, listPhotos } from '@/api'
 import { useSessionStore } from '@/stores/session'
 import CategoryTree from '@/components/CategoryTree.vue'
 import PhotoGrid from '@/components/PhotoGrid.vue'
@@ -195,7 +195,39 @@ function goManage() {
   router.push({ name: 'manage', params: { spaceId } })
 }
 
-onMounted(loadCategories)
+async function showLeaderInactivityNotice() {
+  if (!session.isLeader) return
+  let noticeDays = 30
+  let lastAccess: string | null = null
+  try {
+    const info = await getSpaceInfo(spaceId)
+    noticeDays = info.inactive_notice_days ?? 30
+    lastAccess = info.last_access_at
+  } catch {
+    /* use defaults */
+  }
+  const lastText = lastAccess
+    ? new Date(lastAccess.endsWith('Z') ? lastAccess : lastAccess + 'Z').toLocaleString('zh-CN')
+    : '刚刚'
+  ElMessageBox.alert(
+    `<div style="line-height:1.7">
+      为节省服务器资源，超过 <b style="color:var(--el-color-danger)">${noticeDays} 天</b> 未访问的空间将被自动销毁，届时所有图片、评分与批注都将被清空且无法恢复。<br/><br/>
+      请定期进入本空间以保持活跃。<br/>
+      <span style="color:var(--el-text-color-secondary);font-size:12px">上次活跃：${lastText}</span>
+    </div>`,
+    '空间保留提示',
+    {
+      dangerouslyUseHTMLString: true,
+      confirmButtonText: '我知道了',
+      customClass: 'cs-notice-box',
+    },
+  ).catch(() => {})
+}
+
+onMounted(() => {
+  loadCategories()
+  showLeaderInactivityNotice()
+})
 </script>
 
 <style scoped>

@@ -33,6 +33,9 @@ register_exception_handlers(app)
 @app.on_event("startup")
 def _startup():
     init_db()
+    from .cleanup import start_cleanup_thread
+
+    start_cleanup_thread()
 
 
 @app.get("/api/health")

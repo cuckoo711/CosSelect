@@ -83,6 +83,9 @@ def space_info(space_id: str, space: Space = Depends(require_leader)):
             "expire_time": space.expire_time.isoformat(),
             "expired": space.expire_time < datetime.utcnow(),
             "require_approval": space.require_approval,
+            "last_access_at": space.last_access_at.isoformat() if space.last_access_at else None,
+            "inactive_notice_days": settings.inactive_notice_days,
+            "inactive_destroy_days": settings.inactive_destroy_days,
         }
     )
 

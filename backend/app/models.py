@@ -26,6 +26,9 @@ class Space(Base):
     manage_key: Mapped[str] = mapped_column(String(64), nullable=False)
     require_approval: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     expire_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    last_access_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     categories: Mapped[list["Category"]] = relationship(

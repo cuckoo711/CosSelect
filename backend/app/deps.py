@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import Depends, Header
 from sqlalchemy.orm import Session
@@ -8,9 +8,26 @@ from .models import Participant, Space
 from .response import ApiError
 from .security import parse_participant_token
 
+# only persist last_access_at at most once per this interval to avoid write churn
+_ACCESS_TOUCH_INTERVAL = timedelta(minutes=30)
+
+
+def touch_access(db: Session, space: Space):
+    """Record that the space was accessed (used for inactivity auto-destroy)."""
+    now = datetime.utcnow()
+    if not space.last_access_at or (now - space.last_access_at) > _ACCESS_TOUCH_INTERVAL:
+        space.last_access_at = now
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+
 
 def resolve_space(db: Session, public_id: str) -> Space | None:
-    return db.query(Space).filter(Space.public_id == public_id).first()
+    space = db.query(Space).filter(Space.public_id == public_id).first()
+    if space:
+        touch_access(db, space)
+    return space
 
 
 def get_space(space_id: str, db: Session = Depends(get_db)) -> Space:

@@ -28,6 +28,9 @@ export const getSpaceInfo = (spaceId: string) =>
     expire_time: string
     expired: boolean
     require_approval: boolean
+    last_access_at: string | null
+    inactive_notice_days: number
+    inactive_destroy_days: number
   }>({
     url: `/api/spaces/${spaceId}/info`,
   })
