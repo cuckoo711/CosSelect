@@ -83,7 +83,7 @@ export const listCategories = (spaceId: string) =>
   request<CategoryNode[]>({ url: `/api/spaces/${spaceId}/categories` })
 
 export const createCategory = (spaceId: string, name: string, parentId: number | null) =>
-  request({
+  request<{ id: number; name: string; parent_id: number | null }>({
     url: `/api/spaces/${spaceId}/categories`,
     method: 'post',
     data: { name, parent_id: parentId },

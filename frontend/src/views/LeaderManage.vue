@@ -57,9 +57,12 @@
 
       <!-- add category -->
       <div class="cs-card" style="margin-bottom: 16px">
-        <div class="cs-row" style="margin-bottom: 10px">
+        <div class="cs-row" style="margin-bottom: 10px; flex-wrap: wrap; gap: 8px">
           <b>分类管理</b>
           <span class="cs-spacer" />
+          <el-button size="small" @click="openImport">
+            <el-icon style="margin-right: 4px"><FolderOpened /></el-icon>导入文件夹
+          </el-button>
           <el-button size="small" type="primary" @click="openAdd(null)">新建根分类</el-button>
         </div>
         <el-tree
@@ -124,6 +127,86 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- folder import dialog -->
+    <el-dialog v-model="importVisible" title="按文件夹导入" width="92%" :close-on-click-modal="false">
+      <!-- hidden folder picker -->
+      <input
+        ref="folderInput"
+        type="file"
+        webkitdirectory
+        directory
+        multiple
+        style="display: none"
+        @change="onFolderPick"
+      />
+
+      <template v-if="!importPlan">
+        <div
+          class="dropzone"
+          :class="{ over: dragOver }"
+          @dragover.prevent="dragOver = true"
+          @dragleave.prevent="dragOver = false"
+          @drop.prevent="onDrop2"
+          @click="folderInput?.click()"
+        >
+          <el-icon class="dz-icon"><FolderOpened /></el-icon>
+          <div class="dz-title">拖入文件夹，或点击选择文件夹</div>
+          <div class="dz-desc">
+            将按子文件夹自动创建分类；仅导入 JPG/JPEG，其他文件自动忽略。
+          </div>
+        </div>
+        <div v-if="scanning" class="picked">正在扫描文件夹…</div>
+      </template>
+
+      <template v-else>
+        <div class="import-summary">
+          将创建 <b>{{ importTaskCount }}</b> 个分类，导入 <b>{{ importPlan.jpgCount }}</b> 张 JPG
+          <span v-if="importPlan.skipped" class="dim">（已忽略 {{ importPlan.skipped }} 个非 JPG 文件）</span>
+        </div>
+        <div class="import-tree cs-scroll">
+          <div v-for="(node, i) in importPlan.roots" :key="i">
+            <ImportPreviewNode :node="node" :depth="0" />
+          </div>
+          <div v-if="importPlan.looseFiles.length" class="import-loose">
+            另有 {{ importPlan.looseFiles.length }} 张图片在根目录 → 归入「{{ uploadTarget?.name || '当前分类' }}」
+          </div>
+        </div>
+
+        <el-form label-position="top" style="margin-top: 8px">
+          <el-form-item label="导入到">
+            <el-select v-model="importParentId" style="width: 100%">
+              <el-option :value="0" label="作为根分类（顶层）" />
+              <el-option
+                v-for="opt in flatCategoryOptions"
+                :key="opt.id"
+                :value="opt.id"
+                :label="opt.label"
+              />
+            </el-select>
+          </el-form-item>
+        </el-form>
+
+        <div v-if="importing" style="margin-top: 8px">
+          <div class="picked">{{ importStatus }}</div>
+          <el-progress :percentage="importProgress" :stroke-width="10" />
+        </div>
+      </template>
+
+      <template #footer>
+        <el-button @click="importVisible = false" :disabled="importing">取消</el-button>
+        <el-button v-if="importPlan && !importing" @click="resetImport">重新选择</el-button>
+        <el-button
+          v-if="importPlan"
+          type="primary"
+          :loading="importing"
+          :disabled="importTaskCount === 0"
+          @click="runImport"
+        >
+          开始导入
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -150,6 +233,14 @@ import { copyText, downloadText } from '@/utils/clipboard'
 import { compressImage } from '@/utils/image'
 import { useSessionStore } from '@/stores/session'
 import { SpaceSocket, type WsMessage } from '@/utils/ws'
+import ImportPreviewNode from '@/components/ImportPreviewNode.vue'
+import {
+  buildImportPlan,
+  countFiles,
+  flattenTasks,
+  isJpeg,
+  type ImportNode,
+} from '@/utils/folderImport'
 
 const props = defineProps<{ spaceId: string }>()
 const spaceId = props.spaceId
@@ -356,6 +447,192 @@ async function doUpload() {
   }
 }
 
+// ---------------- Folder import ----------------
+const importVisible = ref(false)
+const folderInput = ref<HTMLInputElement | null>(null)
+const dragOver = ref(false)
+const scanning = ref(false)
+const importPlan = ref<ReturnType<typeof buildImportPlan> | null>(null)
+const importParentId = ref<number>(0)
+const importing = ref(false)
+const importProgress = ref(0)
+const importStatus = ref('')
+
+const importTaskCount = computed(() =>
+  importPlan.value ? importPlan.value.roots.reduce((s, r) => s + countCategories(r), 0) : 0,
+)
+
+function countCategories(node: ImportNode): number {
+  return 1 + node.children.reduce((s, c) => s + countCategories(c), 0)
+}
+
+// flatten existing categories for the "import into" selector
+const flatCategoryOptions = computed(() => {
+  const opts: { id: number; label: string }[] = []
+  const walk = (nodes: CategoryNode[], prefix: string) => {
+    for (const n of nodes) {
+      opts.push({ id: n.id, label: prefix + n.name })
+      walk(n.children, prefix + n.name + ' / ')
+    }
+  }
+  walk(treeData.value, '')
+  return opts
+})
+
+function openImport() {
+  importPlan.value = null
+  importParentId.value = 0
+  importProgress.value = 0
+  importVisible.value = true
+}
+
+function resetImport() {
+  importPlan.value = null
+  importProgress.value = 0
+}
+
+function onFolderPick(e: Event) {
+  const input = e.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  const withPaths = files.map((f) => ({
+    file: f,
+    path: (f as any).webkitRelativePath || f.name,
+  }))
+  buildPlan(withPaths)
+  input.value = ''
+}
+
+async function onDrop2(e: DragEvent) {
+  dragOver.value = false
+  const items = e.dataTransfer?.items
+  if (!items) return
+  scanning.value = true
+  try {
+    const entries: any[] = []
+    for (let i = 0; i < items.length; i++) {
+      const entry = (items[i] as any).webkitGetAsEntry?.()
+      if (entry) entries.push(entry)
+    }
+    const collected: { file: File; path: string }[] = []
+    await Promise.all(entries.map((en) => readEntry(en, '', collected)))
+    buildPlan(collected)
+  } finally {
+    scanning.value = false
+  }
+}
+
+function readEntry(entry: any, prefix: string, out: { file: File; path: string }[]): Promise<void> {
+  return new Promise((resolve) => {
+    if (entry.isFile) {
+      entry.file((file: File) => {
+        out.push({ file, path: prefix + entry.name })
+        resolve()
+      }, () => resolve())
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader()
+      const all: any[] = []
+      const readBatch = () => {
+        reader.readEntries(async (batch: any[]) => {
+          if (batch.length === 0) {
+            await Promise.all(all.map((c) => readEntry(c, prefix + entry.name + '/', out)))
+            resolve()
+          } else {
+            all.push(...batch)
+            readBatch()
+          }
+        }, () => resolve())
+      }
+      readBatch()
+    } else {
+      resolve()
+    }
+  })
+}
+
+function buildPlan(files: { file: File; path: string }[]) {
+  const plan = buildImportPlan(files)
+  if (plan.jpgCount === 0) {
+    ElMessage.warning('没有找到可导入的 JPG 图片')
+    importPlan.value = null
+    return
+  }
+  importPlan.value = plan
+}
+
+async function runImport() {
+  if (!importPlan.value) return
+  importing.value = true
+  importProgress.value = 0
+  try {
+    const rootParent = importParentId.value || null
+    // count total files for progress
+    let totalFiles = importPlan.value.roots.reduce((s, r) => s + countFiles(r), 0)
+    totalFiles += importPlan.value.looseFiles.length
+    let done = 0
+
+    // recursively create categories and upload
+    const createAndUpload = async (node: ImportNode, parentId: number | null) => {
+      importStatus.value = `创建分类「${node.name}」…`
+      const existing = findChildByName(parentId, node.name)
+      const catId = existing ?? (await createCategory(spaceId, node.name, parentId)).id
+      if (node.files.length) {
+        const compressed: File[] = []
+        for (const f of node.files) {
+          if (isJpeg(f)) compressed.push(await compressImage(f))
+        }
+        importStatus.value = `上传「${node.name}」(${compressed.length} 张)…`
+        await uploadPhotos(spaceId, catId, compressed)
+        done += node.files.length
+        importProgress.value = Math.round((done / totalFiles) * 100)
+      }
+      await loadTree() // refresh so findChildByName works for nested levels
+      for (const child of node.children) {
+        await createAndUpload(child, catId)
+      }
+    }
+
+    for (const root of importPlan.value.roots) {
+      await createAndUpload(root, rootParent)
+    }
+
+    // loose files at root -> upload into the chosen parent (if it's a category)
+    if (importPlan.value.looseFiles.length && rootParent) {
+      const compressed: File[] = []
+      for (const f of importPlan.value.looseFiles) {
+        if (isJpeg(f)) compressed.push(await compressImage(f))
+      }
+      importStatus.value = `上传根目录图片(${compressed.length} 张)…`
+      await uploadPhotos(spaceId, rootParent, compressed)
+      done += importPlan.value.looseFiles.length
+      importProgress.value = Math.round((done / totalFiles) * 100)
+    }
+
+    importProgress.value = 100
+    ElMessage.success('文件夹导入完成，缩略图后台生成中')
+    importVisible.value = false
+    importPlan.value = null
+    await loadTree()
+  } catch (e: any) {
+    ElMessage.error(e?.message || '导入过程中出错')
+  } finally {
+    importing.value = false
+    importStatus.value = ''
+  }
+}
+
+function findChildByName(parentId: number | null, name: string): number | null {
+  const search = (nodes: CategoryNode[]): number | null => {
+    for (const n of nodes) {
+      const matchParent = parentId == null ? n.parent_id == null : n.parent_id === parentId
+      if (matchParent && n.name === name) return n.id
+      const r = search(n.children)
+      if (r != null) return r
+    }
+    return null
+  }
+  return search(treeData.value)
+}
+
 // drag to reorder among siblings
 function allowDrop(_draggingNode: any, dropNode: any, type: string) {
   return type !== 'inner' && dropNode.level === _draggingNode.level
@@ -449,5 +726,52 @@ onUnmounted(() => {
   margin-top: 10px;
   color: var(--cs-text-dim);
   font-size: 13px;
+}
+.dropzone {
+  border: 2px dashed var(--cs-border);
+  border-radius: 12px;
+  padding: 32px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+.dropzone.over {
+  border-color: var(--cs-accent);
+  background: color-mix(in srgb, var(--cs-accent) 8%, transparent);
+}
+.dz-icon {
+  font-size: 40px;
+  color: var(--cs-accent);
+  margin-bottom: 8px;
+}
+.dz-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.dz-desc {
+  font-size: 12px;
+  color: var(--cs-text-dim);
+  line-height: 1.6;
+}
+.import-summary {
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+.import-summary .dim {
+  font-size: 12px;
+}
+.import-tree {
+  max-height: 320px;
+  border: 1px solid var(--cs-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.import-loose {
+  font-size: 12px;
+  color: var(--cs-text-dim);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--cs-border);
 }
 </style>
