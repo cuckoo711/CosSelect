@@ -178,22 +178,26 @@
             已全部移除，没有可导入的内容。
           </div>
           <div v-if="importPlan.looseFiles.length" class="import-loose">
-            另有 {{ importPlan.looseFiles.length }} 张图片在根目录 → 归入「{{ uploadTarget?.name || '所选分类' }}」
+            另有 {{ importPlan.looseFiles.length }} 张散图（直接位于「{{ importPlan.looseFolderName || '所选文件夹' }}」下）→
+            {{ importParentId ? '归入所选分类' : `新建分类「${importPlan.looseFolderName || '未分类'}」` }}
           </div>
         </div>
 
         <el-form label-position="top" style="margin-top: 8px">
           <el-form-item label="导入到">
             <el-select v-model="importParentId" style="width: 100%">
-              <el-option :value="0" label="作为根分类（顶层）" />
+              <el-option :value="0" label="作为新的分类（放在顶层）" />
               <el-option
                 v-for="opt in flatCategoryOptions"
                 :key="opt.id"
                 :value="opt.id"
-                :label="opt.label"
+                :label="`导入到已有分类：${opt.label}`"
               />
             </el-select>
           </el-form-item>
+          <div class="dim small" style="margin-top: -6px">
+            选「顶层」则每个文件夹各自成为一个新分类；选已有分类则全部挂到它下面。
+          </div>
         </el-form>
 
         <div v-if="importing" style="margin-top: 8px">
@@ -682,14 +686,22 @@ async function runImport() {
       await createAndUpload(root, rootParent)
     }
 
-    // loose files at root -> upload into the chosen parent (if it's a category)
-    if (importPlan.value.looseFiles.length && rootParent) {
+    // loose files (jpgs directly under a wrapper folder). Never drop them:
+    //  - if a parent category is chosen, upload directly into it
+    //  - if importing to top-level, create a category named after the wrapper
+    if (importPlan.value.looseFiles.length) {
       const compressed: File[] = []
       for (const f of importPlan.value.looseFiles) {
         if (isJpeg(f)) compressed.push(await compressImage(f))
       }
-      importStatus.value = `上传根目录图片(${compressed.length} 张)…`
-      await uploadPhotos(spaceId, rootParent, compressed)
+      let looseTarget = rootParent
+      if (!looseTarget) {
+        const name = importPlan.value.looseFolderName || '未分类'
+        const existing = findChildByName(null, name)
+        looseTarget = existing ?? (await createCategory(spaceId, name, null)).id
+      }
+      importStatus.value = `上传散图(${compressed.length} 张)…`
+      await uploadPhotos(spaceId, looseTarget, compressed)
       done += importPlan.value.looseFiles.length
       importProgress.value = Math.round((done / totalFiles) * 100)
     }

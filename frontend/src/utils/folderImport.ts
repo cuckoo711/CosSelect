@@ -40,6 +40,7 @@ export function buildImportPlan(files: { file: File; path: string }[]): {
   jpgCount: number
   skipped: number
   looseFiles: File[] // jpgs sitting directly at the dropped root (no subfolder)
+  looseFolderName: string // name of the wrapper folder the loose files came from
 } {
   const root = newRaw('')
   let jpgCount = 0
@@ -96,12 +97,21 @@ export function buildImportPlan(files: { file: File; path: string }[]): {
   const topLevel = [...root.children.values()]
   let effectiveRoots: RawNode[]
   const looseRaw: File[] = []
+  let looseFolderName = ''
 
   if (topLevel.length === 1) {
     const container = collapse(topLevel[0])
-    // container's own files (jpgs directly under the dropped folder) are "loose"
-    looseRaw.push(...container.files)
-    effectiveRoots = [...container.children.values()]
+    if (container.children.size > 0) {
+      // container is a wrapper (e.g. 时段/): strip it, children become categories.
+      // any stray jpgs sitting directly in it become "loose".
+      looseRaw.push(...container.files)
+      looseFolderName = container.name
+      effectiveRoots = [...container.children.values()]
+    } else {
+      // container is a leaf folder holding photos directly (e.g. part_1/):
+      // it IS a category — keep it (preserve its name).
+      effectiveRoots = [container]
+    }
   } else {
     // multiple top-level items dropped: keep each as a category
     effectiveRoots = topLevel.map((n) => collapse(n))
@@ -122,6 +132,7 @@ export function buildImportPlan(files: { file: File; path: string }[]): {
     jpgCount,
     skipped,
     looseFiles: looseRaw,
+    looseFolderName,
   }
 }
 
