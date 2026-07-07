@@ -41,14 +41,14 @@ function mount() {
     generate()
     return
   }
-  // Thumbs are tiny (~160px JPEGs), so preload several screens ahead to avoid
-  // waiting while scrolling. Vertical margin is large; the worker pool + the
-  // generation queue keep memory/CPU bounded.
+  // Thumbs are tiny (~160px JPEGs). Preload very aggressively (many screens
+  // ahead) so scrolling never waits. The worker pool bounds real concurrency,
+  // so triggering many at once only fills a queue — memory stays low.
   observer = new IntersectionObserver(
     (entries) => {
       if (entries.some((e) => e.isIntersecting)) generate()
     },
-    { rootMargin: '2000px 0px' },
+    { rootMargin: '8000px 0px' },
   )
   observer.observe(root.value)
 }

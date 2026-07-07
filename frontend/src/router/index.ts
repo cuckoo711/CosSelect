@@ -31,6 +31,13 @@ const routes: RouteRecordRaw[] = [
     props: true,
     meta: { leader: true },
   },
+  {
+    path: '/space/:spaceId/import',
+    name: 'import',
+    component: () => import('@/views/ImportFolder.vue'),
+    props: true,
+    meta: { leader: true },
+  },
 ]
 
 const router = createRouter({
