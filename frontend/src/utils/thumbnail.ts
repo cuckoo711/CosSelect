@@ -8,8 +8,10 @@
 
 type PendingResolver = { resolve: (b: Blob) => void; reject: (e: any) => void }
 
+// Decoding runs in the *user's browser*, so size the pool to that device's
+// core count. Leave one core for the UI thread; cap generously.
 const POOL_SIZE = Math.min(
-  6,
+  16,
   Math.max(2, (navigator.hardwareConcurrency || 4) - 1),
 )
 

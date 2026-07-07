@@ -24,7 +24,7 @@ let generated = false
 function generate() {
   if (generated) return
   generated = true
-  createThumbUrl(props.file, 240)
+  createThumbUrl(props.file, 160)
     .then((u) => {
       url.value = u
     })
@@ -81,36 +81,27 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   color: var(--cs-text-dim);
-  font-size: 20px;
+  font-size: 16px;
 }
 .del {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 20px;
-  height: 20px;
+  top: 1px;
+  right: 1px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 10px;
 }
 .del:active {
   background: var(--cs-danger);
 }
+/* filename hidden on the tiny grid thumbs; shown in the big viewer instead */
 .fname {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 2px 4px;
-  font-size: 10px;
-  color: #fff;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: none;
 }
 </style>

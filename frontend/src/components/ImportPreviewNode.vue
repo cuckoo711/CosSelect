@@ -112,8 +112,8 @@ function removeChild(index: number) {
 }
 .ip-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 4px;
   padding: 4px 0 8px;
 }
 </style>
