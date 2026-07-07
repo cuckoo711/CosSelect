@@ -161,15 +161,24 @@
 
       <template v-else>
         <div class="import-summary">
-          将创建 <b>{{ importTaskCount }}</b> 个分类，导入 <b>{{ importPlan.jpgCount }}</b> 张 JPG
+          将创建 <b>{{ liveCategoryCount }}</b> 个分类，导入 <b>{{ liveJpgCount }}</b> 张 JPG
           <span v-if="importPlan.skipped" class="dim">（已忽略 {{ importPlan.skipped }} 个非 JPG 文件）</span>
         </div>
         <div class="import-tree cs-scroll">
-          <div v-for="(node, i) in importPlan.roots" :key="i">
-            <ImportPreviewNode :node="node" :depth="0" />
+          <div v-for="(node, i) in importPlan.roots" :key="node.name + i">
+            <ImportPreviewNode
+              :node="node"
+              :depth="0"
+              @remove="removeRoot(i)"
+              @view="viewFile"
+              @changed="bumpImport"
+            />
+          </div>
+          <div v-if="importPlan.roots.length === 0 && importPlan.looseFiles.length === 0" class="picked">
+            已全部移除，没有可导入的内容。
           </div>
           <div v-if="importPlan.looseFiles.length" class="import-loose">
-            另有 {{ importPlan.looseFiles.length }} 张图片在根目录 → 归入「{{ uploadTarget?.name || '当前分类' }}」
+            另有 {{ importPlan.looseFiles.length }} 张图片在根目录 → 归入「{{ uploadTarget?.name || '所选分类' }}」
           </div>
         </div>
 
@@ -200,12 +209,26 @@
           v-if="importPlan"
           type="primary"
           :loading="importing"
-          :disabled="importTaskCount === 0"
+          :disabled="liveJpgCount === 0"
           @click="runImport"
         >
           开始导入
         </el-button>
       </template>
+    </el-dialog>
+
+    <!-- single image viewer (for import preview) -->
+    <el-dialog v-model="viewerVisible" :title="viewFileMeta?.name || '预览'" width="92%" top="6vh">
+      <div v-if="viewFileUrl" class="viewer-body">
+        <img :src="viewFileUrl" class="viewer-img" />
+        <div v-if="viewFileMeta" class="viewer-meta">
+          <div><span class="k">文件名</span>{{ viewFileMeta.name }}</div>
+          <div><span class="k">尺寸</span>{{ viewFileMeta.w }} × {{ viewFileMeta.h }} 像素（{{ viewFileMeta.mp }} MP）</div>
+          <div><span class="k">大小</span>{{ viewFileMeta.size }}</div>
+          <div><span class="k">类型</span>{{ viewFileMeta.type || '未知' }}</div>
+          <div><span class="k">修改时间</span>{{ viewFileMeta.mtime }}</div>
+        </div>
+      </div>
     </el-dialog>
   </div>
 </template>
@@ -458,12 +481,76 @@ const importing = ref(false)
 const importProgress = ref(0)
 const importStatus = ref('')
 
-const importTaskCount = computed(() =>
-  importPlan.value ? importPlan.value.roots.reduce((s, r) => s + countCategories(r), 0) : 0,
-)
+// bumped whenever the plan is edited (remove folder / delete image) so
+// computed counts re-evaluate even though we mutate arrays in place.
+const importRev = ref(0)
+function bumpImport() {
+  importRev.value += 1
+}
+
+const liveCategoryCount = computed(() => {
+  void importRev.value
+  if (!importPlan.value) return 0
+  return importPlan.value.roots.reduce((s, r) => s + countCategories(r), 0)
+})
+
+const liveJpgCount = computed(() => {
+  void importRev.value
+  if (!importPlan.value) return 0
+  const rootSum = importPlan.value.roots.reduce((s, r) => s + countFiles(r), 0)
+  return rootSum + importPlan.value.looseFiles.length
+})
 
 function countCategories(node: ImportNode): number {
   return 1 + node.children.reduce((s, c) => s + countCategories(c), 0)
+}
+
+function removeRoot(index: number) {
+  if (!importPlan.value) return
+  importPlan.value.roots.splice(index, 1)
+  bumpImport()
+}
+
+// ----- single image viewer -----
+const viewerVisible = ref(false)
+const viewFileUrl = ref('')
+const viewFileMeta = ref<{
+  name: string
+  w: number
+  h: number
+  mp: string
+  size: string
+  type: string
+  mtime: string
+} | null>(null)
+
+function fmtSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return (bytes / 1024 / 1024).toFixed(2) + ' MB'
+  return (bytes / 1024).toFixed(0) + ' KB'
+}
+
+function viewFile(file: File) {
+  if (viewFileUrl.value) URL.revokeObjectURL(viewFileUrl.value)
+  viewFileUrl.value = URL.createObjectURL(file)
+  viewFileMeta.value = {
+    name: file.name,
+    w: 0,
+    h: 0,
+    mp: '—',
+    size: fmtSize(file.size),
+    type: file.type,
+    mtime: file.lastModified ? new Date(file.lastModified).toLocaleString('zh-CN') : '—',
+  }
+  viewerVisible.value = true
+  const img = new Image()
+  img.onload = () => {
+    if (viewFileMeta.value) {
+      viewFileMeta.value.w = img.naturalWidth
+      viewFileMeta.value.h = img.naturalHeight
+      viewFileMeta.value.mp = ((img.naturalWidth * img.naturalHeight) / 1e6).toFixed(1)
+    }
+  }
+  img.src = viewFileUrl.value
 }
 
 // flatten existing categories for the "import into" selector
@@ -666,6 +753,7 @@ onMounted(() => {
 onUnmounted(() => {
   socket?.close()
   if (pollTimer) window.clearInterval(pollTimer)
+  if (viewFileUrl.value) URL.revokeObjectURL(viewFileUrl.value)
 })
 </script>
 
@@ -773,5 +861,26 @@ onUnmounted(() => {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px dashed var(--cs-border);
+}
+.viewer-body {
+  text-align: center;
+}
+.viewer-img {
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: var(--cs-bg-elev2);
+}
+.viewer-meta {
+  margin-top: 12px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 1.9;
+}
+.viewer-meta .k {
+  display: inline-block;
+  width: 72px;
+  color: var(--cs-text-dim);
 }
 </style>
