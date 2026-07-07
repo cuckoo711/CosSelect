@@ -1,6 +1,7 @@
 <template>
-  <div class="thumb" @click="$emit('view')">
-    <img :src="url" :alt="file.name" loading="lazy" />
+  <div ref="root" class="thumb" @click="$emit('view')">
+    <img v-if="url" :src="url" :alt="file.name" />
+    <div v-else class="ph"><el-icon><Picture /></el-icon></div>
     <div class="del" @click.stop="$emit('remove')">
       <el-icon><Close /></el-icon>
     </div>
@@ -10,16 +11,51 @@
 
 <script setup lang="ts">
 import { onUnmounted, ref } from 'vue'
+import { createThumbUrl } from '@/utils/thumbnail'
 
 const props = defineProps<{ file: File }>()
 defineEmits<{ (e: 'view'): void; (e: 'remove'): void }>()
 
-// object URL is created once and released when this thumb unmounts
-// (i.e. when its folder is collapsed or removed), preventing memory leaks.
-const url = ref(URL.createObjectURL(props.file))
+const root = ref<HTMLElement | null>(null)
+const url = ref('')
+let observer: IntersectionObserver | null = null
+let generated = false
+
+function generate() {
+  if (generated) return
+  generated = true
+  createThumbUrl(props.file, 240)
+    .then((u) => {
+      url.value = u
+    })
+    .catch(() => {
+      generated = false // allow retry on next intersection
+    })
+}
+
+// Lazily build the thumbnail only when the cell enters the viewport, so a
+// folder with hundreds of photos doesn't decode them all at once.
+function mount() {
+  if (!root.value) return
+  if (!('IntersectionObserver' in window)) {
+    generate()
+    return
+  }
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) generate()
+    },
+    { rootMargin: '200px' },
+  )
+  observer.observe(root.value)
+}
+
+// use a microtask so the ref is attached
+requestAnimationFrame(mount)
 
 onUnmounted(() => {
-  URL.revokeObjectURL(url.value)
+  observer?.disconnect()
+  if (url.value) URL.revokeObjectURL(url.value)
 })
 </script>
 
@@ -37,6 +73,15 @@ onUnmounted(() => {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+.ph {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cs-text-dim);
+  font-size: 20px;
 }
 .del {
   position: absolute;
